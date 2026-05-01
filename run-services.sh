@@ -7,8 +7,8 @@ start)
     pkill -f "node.*vite" 2>/dev/null
     sleep 1
     cd /root/Mlai-lab
-    setsid bash -c 'cd /root/Mlai-lab/backend && python3 app.py </dev/null >/dev/null 2>&1' &
-    setsid bash -c 'cd /root/Mlai-lab/frontend && npm run dev </dev/null >/dev/null 2>&1' &
+    nohup bash -c 'cd /root/Mlai-lab/backend && python3 app.py </dev/null' >/dev/null 2>&1 &
+    nohup bash -c 'cd /root/Mlai-lab/frontend && npm run dev </dev/null' >/dev/null 2>&1 &
     sleep 3
     if ss -tlnp 2>/dev/null | grep -q ":8000"; then
         echo "后端已启动 (端口 8000)"
