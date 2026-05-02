@@ -4,12 +4,14 @@ $db_user = "root";
 $db_pwd  = "123456";
 $db_name = "sqli_db";
 
-$conn = mysqli_connect($db_host,$db_user,$db_pwd,$db_name);
-if(!$conn){
-    die("数据库连接失败");
+try {
+    $conn = new PDO("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pwd);
+    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch(PDOException $e) {
+    die("数据库连接失败: " . $e->getMessage());
 }
 
-$id = $_GET['id'];
+$id = isset($_GET['id']) ? $_GET['id'] : '';
 
 $filter = ['union', 'select', 'or', 'and', '--', '#', '/*', '*/', 'insert', 'delete', 'update', 'drop'];
 foreach($filter as $word){
@@ -17,8 +19,14 @@ foreach($filter as $word){
 }
 
 $sql = "select * from users where id = $id";
-$result = mysqli_query($conn,$sql);
+$result = null;
+$error = null;
 
+try {
+    $result = $conn->query($sql);
+} catch(PDOException $e) {
+    $error = $e->getMessage();
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -40,7 +48,7 @@ $result = mysqli_query($conn,$sql);
             border: 1px solid #0f3460;
         }
         h1 {
-            color: #a855f7;
+            color: #00ff88;
             border-bottom: 1px solid #0f3460;
             padding-bottom: 10px;
         }
@@ -51,23 +59,16 @@ $result = mysqli_query($conn,$sql);
             margin: 15px 0;
             color: #ffc107;
         }
-        .warning {
-            background: rgba(168, 85, 247, 0.1);
-            padding: 10px;
-            border-radius: 5px;
-            margin: 15px 0;
-            color: #a855f7;
-        }
         .query {
             background: #0d1117;
             padding: 15px;
             border-radius: 5px;
             font-family: monospace;
             margin: 15px 0;
-            border-left: 3px solid #a855f7;
+            border-left: 3px solid #00ff88;
         }
         .result {
-            background: rgba(168, 85, 247, 0.1);
+            background: rgba(0, 255, 136, 0.1);
             padding: 15px;
             border-radius: 5px;
             margin: 15px 0;
@@ -86,7 +87,7 @@ $result = mysqli_query($conn,$sql);
         }
         button {
             padding: 10px 20px;
-            background: #a855f7;
+            background: #00ff88;
             border: none;
             border-radius: 5px;
             color: #1a1a2e;
@@ -94,24 +95,20 @@ $result = mysqli_query($conn,$sql);
             cursor: pointer;
         }
         button:hover {
-            background: #9333ea;
+            background: #00cc6a;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>SQL注入-高级</h1>
-        
+
         <div class="hint">
             <strong>题目描述：</strong>获取数据库中的flag，flag存储在flag表中
         </div>
-        
-        <div class="warning">
-            <strong>警告：</strong>UNION、SELECT、OR、AND、--、# 等关键字已被过滤
-        </div>
 
         <div class="hint">
-            <strong>提示：</strong>尝试使用双写绕过，例如：UNIUNIONON SELSELECTECT
+            <strong>提示：</strong>过滤了很多关键词，尝试使用大小写混淆或其他绕过方式
         </div>
 
         <div class="input-area">
@@ -121,7 +118,7 @@ $result = mysqli_query($conn,$sql);
             </form>
         </div>
 
-        <?php if(isset($id)): ?>
+        <?php if(!empty($id)): ?>
         <div class="query">
             <strong>执行的SQL：</strong><br>
             <?php echo htmlspecialchars($sql); ?>
@@ -130,7 +127,9 @@ $result = mysqli_query($conn,$sql);
         <div class="result">
             <strong>查询结果：</strong><br>
             <?php
-            if($row = mysqli_fetch_assoc($result)){
+            if(isset($error)){
+                echo "<span style='color: #ff4757;'>SQL执行错误：".$error."</span>";
+            }elseif($row = $result->fetch(PDO::FETCH_ASSOC)){
                 echo "用户名：".$row['username']."<br>";
                 echo "密码：".$row['password'];
             }else{

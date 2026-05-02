@@ -52,19 +52,19 @@ docker_run_configs = {
         'image': 'php:7.4-apache',
         'port': 80,
         'volumes': {'./www': '/var/www/html'},
-        'env': {'MYSQL_ROOT_PASSWORD': '1234'}
+        'env': {}
     },
     'SQL注入-中级': {
         'image': 'php:7.4-apache',
         'port': 80,
         'volumes': {'./www': '/var/www/html'},
-        'env': {'MYSQL_ROOT_PASSWORD': '1234'}
+        'env': {}
     },
     'SQL注入-高级': {
         'image': 'php:7.4-apache',
         'port': 80,
         'volumes': {'./www': '/var/www/html'},
-        'env': {'MYSQL_ROOT_PASSWORD': '1234'}
+        'env': {}
     },
     '反射型XSS': {
         'image': 'nginx:alpine',
