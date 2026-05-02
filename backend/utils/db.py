@@ -5,8 +5,8 @@ import pymysql
 def get_db_connection():
     conn = pymysql.connect(
         host='localhost',
-        user='root',
-        password='rootpass',
+        user='Mlai',
+        password='1234',
         database='mlai_lab',
         cursorclass=pymysql.cursors.DictCursor
     )
