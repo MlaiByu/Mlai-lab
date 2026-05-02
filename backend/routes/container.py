@@ -113,7 +113,9 @@ def create_container():
             return jsonify({'success': False, 'message': '端口范围内没有可用端口'}), 500
         
         if os.path.exists(compose_file):
-            cmd = f"cd {docker_dir} && HOST_PORT={host_port} docker compose up -d"
+            _, _, _ = run_docker_command(f"cd {docker_dir} && docker compose down 2>/dev/null")
+            
+            cmd = f"cd {docker_dir} && HOST_PORT={host_port} docker compose up -d --build"
             success_build, stdout_build, stderr_build = run_docker_command(cmd)
             if not success_build:
                 return jsonify({'success': False, 'message': f'启动容器失败: {stderr_build}'}), 500

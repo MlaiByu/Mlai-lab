@@ -1,7 +1,5 @@
-version: '3.8'
 services:
   web:
-    image: mlai-lab/xss-dom:latest
     build: .
     restart: always
     ports:

@@ -1,133 +1,120 @@
 # Mlai-Lab 网络安全培训平台
 
-## 项目简介
+## 项目概述
 
-Mlai-Lab 是一个网络安全培训平台，提供多种漏洞环境供学习者进行实战练习。
+Mlai-Lab 是一个网络安全培训平台，提供9种漏洞实战环境，用于网络安全学习和实践。
 
-### 主要功能
+## 当前环境
 
-- 用户认证系统（注册、登录、角色管理）
-- 9个漏洞实验环境（SQL注入、XSS、反序列化、文件上传等）
-- 实验记录管理（开始时间、结束时间、成功状态）
-- 个人学习进度追踪
-- 教师端查看学生完成情况
+- **后端服务**: 运行在 0.0.0.0:8000
+- **前端服务**: 运行在 0.0.0.0:3000
+- **数据库**: MySQL
+- **漏洞环境**: Docker
 
-### 技术栈
+## 环境要求
 
-**后端**: Python 3.10+ / Flask 2.3.3 / SQLite / JWT
-**前端**: Vue 3 / Vite 5 / Element Plus / Vue Router
-**容器化**: Docker（仅漏洞环境）
+- Python 3.8+
+- Node.js 16+
+- Docker + Docker Compose
+- MySQL
 
----
+## 完整启动流程
 
-## 项目结构
-
-```
-Mlai-Lab/
-├── backend/                    # 后端服务（服务器直接运行）
-│   ├── app.py                 # Flask应用入口
-│   ├── config.py              # 配置文件
-│   ├── init_db.py             # 数据库初始化
-│   ├── routes/                # 路由模块
-│   │   ├── auth.py           # 认证
-│   │   ├── container.py      # Docker容器管理
-│   │   ├── experiment.py     # 实验记录
-│   │   ├── health.py          # 健康检查
-│   │   └── users.py          # 用户管理
-│   └── utils/
-│       └── db.py             # 数据库操作
-├── frontend/                  # 前端服务（服务器直接运行）
-│   ├── src/                  # 源代码
-│   │   ├── api/              # API调用
-│   │   ├── components/        # 组件
-│   │   ├── router/           # 路由
-│   │   ├── store/            # 状态管理
-│   │   └── views/            # 页面
-│   └── vite.config.js        # Vite配置
-├── docker/                    # Docker漏洞环境
-│   ├── sqli-easy/            # SQL注入-入门
-│   ├── sqli-medium/          # SQL注入-中级
-│   ├── sqli-hard/            # SQL注入-高级
-│   ├── xss-reflected/        # 反射型XSS
-│   ├── xss-stored/           # 存储型XSS
-│   ├── xss-dom/              # DOM型XSS
-│   ├── php-deserialization/   # PHP反序列化
-│   ├── python-deserialization/ # Python反序列化
-│   ├── file-upload/           # 文件上传
-│   └── build-images.sh        # 镜像构建脚本
-├── requirements.txt           # Python依赖
-├── start-services.sh         # 服务管理脚本
-└── README.md
-```
-
----
-
-## 快速开始
-
-### 1. 安装依赖
+### 第一步：克隆项目
 
 ```bash
-# 后端依赖
+git clone https://github.com/MlaiByu/Mlai-lab.git
+cd Mlai-lab
+```
+
+### 第二步：安装Python依赖
+
+```bash
 pip install -r requirements.txt
-
-# 前端依赖
-cd frontend && npm install
 ```
 
-### 2. 启动服务
+### 第三步：安装前端依赖
 
 ```bash
-# 启动所有服务
-./start-services.sh start
-
-# 查看服务状态
-./start-services.sh status
-
-# 停止服务
-./start-services.sh stop
+cd frontend
+npm install
+cd ..
 ```
 
-### 3. 访问
+### 第四步：配置MySQL数据库
 
-- 前端：http://8.136.148.183:3000
-- 后端：http://8.136.148.183:8000
+#### 4.1 登录MySQL
 
-### 4. 默认账号
+```bash
+mysql -u root -p
+```
 
-- 管理员：admin / admin123
-- 学生：student / student123
+#### 4.2 执行以下SQL命令
 
----
+```sql
+-- 创建数据库
+CREATE DATABASE IF NOT EXISTS mlai_lab;
 
-## Docker漏洞环境
+-- 创建用户并授权
+CREATE USER IF NOT EXISTS 'Mlai'@'localhost' IDENTIFIED BY '1234';
+GRANT ALL PRIVILEGES ON mlai_lab.* TO 'Mlai'@'localhost';
+FLUSH PRIVILEGES;
 
-首次使用需要构建镜像：
+-- 退出MySQL
+EXIT;
+```
+
+### 第五步：构建Docker漏洞镜像（首次使用必须）
 
 ```bash
 cd docker
 ./build-images.sh
+cd ..
 ```
 
----
-
-## 服务管理
+### 第六步：启动服务
 
 ```bash
-./start-services.sh start    # 启动服务
-./start-services.sh stop     # 停止服务
-./start-services.sh restart  # 重启服务
-./start-services.sh status   # 查看状态
+chmod +x start.sh
+./start.sh start
 ```
 
----
+### 第七步：访问应用
+
+- **前端地址**: http://localhost:3000
+- **后端API**: http://localhost:8000
+- **公网地址**: http://8.136.148.183:3000
+
+## 默认账号
+
+| 用户名 | 密码 | 角色 |
+|--------|------|------|
+| admin | password | 教师 |
+| user | userpass | 学生 |
+
+## 服务管理命令
+
+```bash
+# 启动服务
+./start.sh start
+
+# 停止服务
+./start.sh stop
+
+# 重启服务
+./start.sh restart
+
+# 查看服务状态
+./start.sh status
+```
 
 ## 漏洞环境列表
 
-| 编号 | 漏洞名称 | 难度 |
+| 编号 | 漏洞类型 | 难度 |
 |------|----------|------|
-| 1 | SQL注入-入门 | ⭐ |
-| 2 | SQL注入-中级 | ⭐⭐ |
-| 3 | SQL注入-高级 | ⭐⭐⭐ |
+| 1 | SQL注入 - 入门 | ⭐ |
+| 2 | SQL注入 - 中级 | ⭐⭐ |
+| 3 | SQL注入 - 高级 | ⭐⭐⭐ |
 | 4 | 反射型XSS | ⭐ |
 | 5 | 存储型XSS | ⭐⭐ |
 | 6 | DOM型XSS | ⭐⭐ |
@@ -135,29 +122,76 @@ cd docker
 | 8 | Python反序列化 | ⭐⭐⭐ |
 | 9 | 文件上传 | ⭐ |
 
----
+## 快速命令汇总
 
-## API接口
+```bash
+# 完整启动流程
+git clone https://github.com/MlaiByu/Mlai-lab.git
+cd Mlai-lab
+pip install -r requirements.txt
+cd frontend && npm install && cd ..
+cd docker && ./build-images.sh && cd ..
+chmod +x start.sh
+./start.sh start
 
-### 认证
-- `POST /api/auth/register` - 注册
-- `POST /api/auth/login` - 登录
-- `GET /api/auth/userinfo` - 用户信息
+# 日常操作
+./start.sh status    # 查看状态
+./start.sh stop      # 停止服务
+./start.sh restart   # 重启服务
+```
 
-### 容器
-- `POST /api/container/create` - 创建容器
-- `POST /api/container/remove/<id>` - 删除容器
-- `POST /api/container/get_by_vuln` - 获取容器
+## 项目结构
 
-### 实验
-- `POST /api/experiment/start` - 开始实验
-- `POST /api/experiment/complete` - 完成实验
-- `POST /api/experiment/stop` - 停止实验
+```
+Mlai-lab/
+├── backend/         # Flask后端
+│   ├── app.py      # 主应用
+│   ├── routes/      # API路由
+│   └── utils/      # 工具模块
+├── frontend/      # Vue3前端
+│   ├── src/        # 源代码
+│   └── package.json
+├── docker/        # 漏洞环境
+│   ├── build-images.sh
+│   ├── sqli-easy/
+│   ├── sqli-medium/
+│   ├── sqli-hard/
+│   ├── xss-reflected/
+│   ├── xss-stored/
+│   ├── xss-dom/
+│   ├── php-deserialization/
+│   ├── python-deserialization/
+│   └── file-upload/
+├── start.sh       # 服务管理脚本
+└── requirements.txt
+```
 
----
+## 常见问题
 
-## 注意事项
+### 端口已被占用
 
-1. Docker靶场端口限制在10000-13000范围内
-2. 容器默认1小时后自动过期
-3. 漏洞环境运行在Docker中，前后端直接运行在服务器
+修改 `backend/app.py` 或 `frontend/vite.config.js` 中的端口配置。
+
+### Docker权限问题
+
+确保当前用户在 docker 用户组中：
+```bash
+sudo usermod -aG docker $USER
+```
+
+### npm依赖安装失败
+
+尝试清理缓存：
+```bash
+cd frontend
+npm cache clean --force
+npm install
+```
+
+### MySQL连接失败
+
+检查MySQL服务是否启动，用户名和密码是否正确。
+
+## LICENSE
+
+MIT License
