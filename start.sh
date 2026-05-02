@@ -9,38 +9,30 @@ function start_services() {
     pkill -f "vite" 2>/dev/null
     sleep 1
 
-    # 启动后端 - 使用nohup和disown确保持久化
-    cd /root/Mlai-lab/backend
-    nohup python3 app.py </dev/null >/dev/null 2>&1 &
-    BACKEND_PID=$!
-    disown $BACKEND_PID
-    echo "后端已启动 (PID: $BACKEND_PID)"
+    # 使用setsid创建独立会话，确保进程持久化
+    setsid bash -c "cd /root/Mlai-lab/backend && python3 app.py </dev/null >/dev/null 2>&1" &
+    echo "后端启动中..."
 
-    # 启动前端
-    cd /root/Mlai-lab/frontend
-    nohup npm run dev </dev/null >/dev/null 2>&1 &
-    FRONTEND_PID=$!
-    disown $FRONTEND_PID
-    echo "前端已启动 (PID: $FRONTEND_PID)"
+    setsid bash -c "cd /root/Mlai-lab/frontend && npm run dev </dev/null >/dev/null 2>&1" &
+    echo "前端启动中..."
 
     # 等待服务启动
-    sleep 5
+    sleep 6
 
     # 验证服务状态
     echo ""
     echo "=== 服务状态检查 ==="
-    if ss -tlnp 2>/dev/null | grep -q ":8000"; then
+    if ps aux | grep -E "python.*app.py" | grep -v grep > /dev/null; then
         echo "✅ 后端运行中: http://8.136.148.183:8000"
     else
         echo "❌ 后端启动失败"
     fi
 
-    if ss -tlnp 2>/dev/null | grep -q ":3000"; then
+    if ps aux | grep -E "vite" | grep -v grep > /dev/null; then
         echo "✅ 前端运行中: http://8.136.148.183:3000"
     else
         echo "❌ 前端启动失败"
     fi
-    echo ""
 }
 
 function stop_services() {
