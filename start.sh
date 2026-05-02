@@ -1,71 +1,87 @@
 #!/bin/bash
-# Mlai-Lab 项目启动脚本（持久化版本）
-# 确保终端断开后服务仍在运行
+# Mlai-Lab 持久化服务启动脚本
 
-function start() {
-    echo "正在停止旧进程..."
+function start_services() {
+    echo "正在启动 Mlai-Lab 服务..."
+
+    # 停止已有进程
     pkill -f "python.*app.py" 2>/dev/null
     pkill -f "vite" 2>/dev/null
-    pkill -f "node.*vite" 2>/dev/null
-    sleep 2
+    sleep 1
 
-    echo "正在启动后端..."
+    # 启动后端 - 使用nohup和disown确保持久化
     cd /root/Mlai-lab/backend
-    nohup python3 app.py > /tmp/mlai-backend.log 2>&1 &
-    echo "后端进程ID: $!"
+    nohup python3 app.py </dev/null >/dev/null 2>&1 &
+    BACKEND_PID=$!
+    disown $BACKEND_PID
+    echo "后端已启动 (PID: $BACKEND_PID)"
 
-    echo "正在启动前端..."
+    # 启动前端
     cd /root/Mlai-lab/frontend
-    nohup npm run dev > /tmp/mlai-frontend.log 2>&1 &
-    echo "前端进程ID: $!"
+    nohup npm run dev </dev/null >/dev/null 2>&1 &
+    FRONTEND_PID=$!
+    disown $FRONTEND_PID
+    echo "前端已启动 (PID: $FRONTEND_PID)"
 
-    echo "等待服务启动..."
-    sleep 6
+    # 等待服务启动
+    sleep 5
 
+    # 验证服务状态
     echo ""
     echo "=== 服务状态检查 ==="
     if ss -tlnp 2>/dev/null | grep -q ":8000"; then
-        echo "✅ 后端: http://127.0.0.1:8000 (外网: http://8.136.148.183:8000)"
+        echo "✅ 后端运行中: http://8.136.148.183:8000"
     else
-        echo "❌ 后端启动失败，请查看 /tmp/mlai-backend.log"
+        echo "❌ 后端启动失败"
     fi
 
     if ss -tlnp 2>/dev/null | grep -q ":3000"; then
-        echo "✅ 前端: http://127.0.0.1:3000 (外网: http://8.136.148.183:3000)"
+        echo "✅ 前端运行中: http://8.136.148.183:3000"
     else
-        echo "❌ 前端启动失败，请查看 /tmp/mlai-frontend.log"
+        echo "❌ 前端启动失败"
     fi
+    echo ""
 }
 
-function stop() {
+function stop_services() {
     echo "正在停止服务..."
     pkill -f "python.*app.py"
     pkill -f "vite"
-    pkill -f "node.*vite"
+    sleep 1
     echo "服务已停止"
 }
 
-function status() {
+function check_status() {
     echo "=== Mlai-Lab 服务状态 ==="
-    ps aux | grep -E "(python.*app|vite|node.*vite)" | grep -v grep || echo "无服务在运行"
+    if ps aux | grep -E "python.*app.py" | grep -v grep > /dev/null; then
+        echo "✅ 后端运行中"
+    else
+        echo "❌ 后端未运行"
+    fi
+
+    if ps aux | grep -E "vite" | grep -v grep > /dev/null; then
+        echo "✅ 前端运行中"
+    else
+        echo "❌ 前端未运行"
+    fi
     echo ""
-    ss -tlnp 2>/dev/null | grep -E ":(3000|8000)" || echo "无端口在监听"
+    ss -tlnp 2>/dev/null | grep -E ":(3000|8000)"
 }
 
 case "$1" in
     start)
-        start
+        start_services
         ;;
     stop)
-        stop
+        stop_services
         ;;
     restart)
-        stop
+        stop_services
         sleep 2
-        start
+        start_services
         ;;
     status)
-        status
+        check_status
         ;;
     *)
         echo "用法: $0 {start|stop|restart|status}"
