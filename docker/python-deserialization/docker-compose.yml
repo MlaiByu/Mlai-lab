@@ -1,6 +1,9 @@
 services:
   web:
-    build: .
+    image: python:3.9-slim
     restart: always
     ports:
-      - "${HOST_PORT}:80"
+      - "${HOST_PORT}:8000"
+    volumes:
+      - ./www:/app
+    command: python server.py

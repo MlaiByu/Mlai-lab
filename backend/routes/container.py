@@ -47,11 +47,66 @@ tag_map = {
     '文件上传': 'file-upload'
 }
 
+docker_run_configs = {
+    'SQL注入-入门': {
+        'image': 'php:7.4-apache',
+        'port': 80,
+        'volumes': {'./www': '/var/www/html'},
+        'env': {'MYSQL_ROOT_PASSWORD': 'rootpass'}
+    },
+    'SQL注入-中级': {
+        'image': 'php:7.4-apache',
+        'port': 80,
+        'volumes': {'./www': '/var/www/html'},
+        'env': {'MYSQL_ROOT_PASSWORD': 'rootpass'}
+    },
+    'SQL注入-高级': {
+        'image': 'php:7.4-apache',
+        'port': 80,
+        'volumes': {'./www': '/var/www/html'},
+        'env': {'MYSQL_ROOT_PASSWORD': 'rootpass'}
+    },
+    '反射型XSS': {
+        'image': 'nginx:alpine',
+        'port': 80,
+        'volumes': {'./www': '/usr/share/nginx/html'},
+        'env': {}
+    },
+    '存储型XSS': {
+        'image': 'nginx:alpine',
+        'port': 80,
+        'volumes': {'./www': '/usr/share/nginx/html'},
+        'env': {}
+    },
+    'DOM型XSS': {
+        'image': 'nginx:alpine',
+        'port': 80,
+        'volumes': {'./www': '/usr/share/nginx/html'},
+        'env': {}
+    },
+    'PHP反序列化': {
+        'image': 'php:7.4-apache',
+        'port': 80,
+        'volumes': {'./www': '/var/www/html'},
+        'env': {}
+    },
+    'Python反序列化': {
+        'image': 'python:3.9-slim',
+        'port': 8000,
+        'volumes': {'./www': '/app'},
+        'command': 'python server.py',
+        'env': {}
+    },
+    '文件上传': {
+        'image': 'php:7.4-apache',
+        'port': 80,
+        'volumes': {'./www': '/var/www/html'},
+        'env': {}
+    }
+}
+
 def run_docker_command(cmd):
     try:
-        cmd = cmd.replace('/root/.local/bin/docker-compose', 'docker compose')
-        cmd = cmd.replace('docker-compose', 'docker compose')
-
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
         return result.returncode == 0, result.stdout.strip(), result.stderr.strip()
     except Exception as e:
@@ -72,16 +127,15 @@ def cleanup_expired_containers(user_id=None):
             pass
     
     for c in expired_containers:
-        compose_dir = c.get('compose_dir')
-        if compose_dir and os.path.exists(compose_dir):
-            run_docker_command(f"cd {compose_dir} && docker compose down")
-        else:
-            run_docker_command(f"docker rm -f {c['id']}")
+        container_id = c.get('id')
+        if container_id:
+            run_docker_command(f"docker rm -f {container_id}")
         
-        for i, container in enumerate(running_containers):
-            if container['id'] == c['id']:
-                del running_containers[i]
-                break
+        host_port = c.get('host_port')
+        if host_port and host_port in used_ports:
+            used_ports.discard(host_port)
+        
+        running_containers.remove(c)
 
 @container_bp.route('/api/container/create', methods=['POST'])
 def create_container():
@@ -106,56 +160,41 @@ def create_container():
             return jsonify({'success': False, 'message': 'Docker服务不可用'}), 500
         
         docker_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'docker', type_tag))
-        compose_file = os.path.join(docker_dir, 'docker-compose.yml')
         
         host_port = get_available_port()
         if not host_port:
             return jsonify({'success': False, 'message': '端口范围内没有可用端口'}), 500
         
-        if os.path.exists(compose_file):
-            _, _, _ = run_docker_command(f"cd {docker_dir} && docker compose down 2>/dev/null")
-            
-            cmd = f"cd {docker_dir} && HOST_PORT={host_port} docker compose up -d --build"
-            success_build, stdout_build, stderr_build = run_docker_command(cmd)
-            if not success_build:
-                return jsonify({'success': False, 'message': f'启动容器失败: {stderr_build}'}), 500
-            
-            time.sleep(3)
-            
-            success_ps, stdout_ps, stderr_ps = run_docker_command(
-                f"cd {docker_dir} && docker compose ps -q web"
-            )
-            if success_ps and stdout_ps:
-                container_id = stdout_ps.strip()[:12]
-            else:
-                success_ps, stdout_ps, stderr_ps = run_docker_command(
-                    f"docker ps --filter name=*{type_tag}* --format '{{.ID}}'"
-                )
-                if not success_ps or not stdout_ps:
-                    return jsonify({'success': False, 'message': '无法获取容器信息'}), 500
-                container_id = stdout_ps.strip().split('\n')[0][:12]
-            
-            if not container_id:
-                return jsonify({'success': False, 'message': '无法获取容器信息'}), 500
-            
-            image_tag = f"mlai-lab-{type_tag}"
-        else:
-            image_tag = f"mlai-lab-{type_tag}"
-            
-            success_img, stdout_img, stderr_img = run_docker_command(f"docker images -q {image_tag}")
-            if not success_img or not stdout_img:
-                return jsonify({'success': False, 'message': '镜像不存在'}), 500
-            
-            success_run, stdout_run, stderr_run = run_docker_command(
-                f"docker run -d --name {container_name} -p {host_port}:80 --label {CONTAINER_LABEL}={vulnerability_type} --user 1000 --stop-timeout 3600 {image_tag}"
-            )
-            
-            if not success_run:
-                return jsonify({'success': False, 'message': f'启动容器失败: {stderr_run}'}), 500
-            
-            container_id = stdout_run
-            
-            time.sleep(2)
+        config = docker_run_configs.get(vulnerability_type, {})
+        image = config.get('image', 'php:7.4-apache')
+        container_port = config.get('port', 80)
+        volumes = config.get('volumes', {})
+        env_vars = config.get('env', {})
+        command = config.get('command', '')
+        
+        volume_str = ""
+        for host_path, container_path in volumes.items():
+            abs_host_path = os.path.join(docker_dir, host_path)
+            volume_str += f"-v {abs_host_path}:{container_path} "
+        
+        env_str = ""
+        for key, value in env_vars.items():
+            env_str += f"-e {key}={value} "
+        
+        stop_timeout = 3600
+        
+        cmd = f"docker run -d --name {container_name} -p {host_port}:{container_port} {volume_str}{env_str}--label {CONTAINER_LABEL}={vulnerability_type} --stop-timeout {stop_timeout} {image}"
+        
+        if command:
+            cmd = cmd + f" {command}"
+        
+        success_run, stdout_run, stderr_run = run_docker_command(cmd)
+        
+        if not success_run:
+            return jsonify({'success': False, 'message': f'启动容器失败: {stderr_run}'}), 500
+        
+        container_id = stdout_run.strip()[:12]
+        time.sleep(2)
         
         container_info = {
             'id': container_id,
@@ -164,8 +203,7 @@ def create_container():
             'vulnerability_type': vulnerability_type,
             'host_port': host_port,
             'created_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-            'timeout_at': time.time() + 3600,
-            'compose_dir': docker_dir if os.path.exists(compose_file) else None
+            'timeout_at': time.time() + 3600
         }
         running_containers.append(container_info)
         
@@ -175,7 +213,6 @@ def create_container():
             'container_name': container_name,
             'host_port': host_port,
             'vulnerability_type': vulnerability_type,
-            'image': image_tag,
             'message': '容器创建成功'
         })
     
@@ -190,26 +227,15 @@ def remove_container(container_id):
         vulnerability_type = data.get('vulnerability_type', '')
         session_id = data.get('session_id', data.get('sessionId', ''))
         
-        compose_dir = None
-        vuln_type = None
-        for c in running_containers:
-            if c['id'] == container_id:
-                compose_dir = c.get('compose_dir')
-                vuln_type = c.get('vulnerability_type')
-                break
-        
-        if compose_dir and os.path.exists(compose_dir):
-            success, stdout, stderr = run_docker_command(f"cd {compose_dir} && docker compose down")
-        else:
-            success, stdout, stderr = run_docker_command(f"docker rm -f {container_id}")
+        success, stdout, stderr = run_docker_command(f"docker rm -f {container_id}")
         
         if success:
-            for i, c in enumerate(running_containers):
+            for c in running_containers:
                 if c['id'] == container_id:
                     host_port = c.get('host_port')
                     if host_port and host_port in used_ports:
-                        used_ports.remove(host_port)
-                    del running_containers[i]
+                        used_ports.discard(host_port)
+                    running_containers.remove(c)
                     break
             
             if user_id and vulnerability_type:
@@ -242,16 +268,11 @@ def get_container_by_vuln():
         for c in running_containers:
             if c['vulnerability_type'] == vulnerability_type and c['status'] == 'running':
                 if c.get('timeout_at') and time.time() >= c['timeout_at']:
-                    if c.get('compose_dir') and os.path.exists(c['compose_dir']):
-                        run_docker_command(f"cd {c['compose_dir']} && docker compose down")
-                    else:
-                        run_docker_command(f"docker rm -f {c['id']}")
-                    
-                    for i, container in enumerate(running_containers):
-                        if container['id'] == c['id']:
-                            del running_containers[i]
-                            break
-                    
+                    run_docker_command(f"docker rm -f {c['id']}")
+                    host_port = c.get('host_port')
+                    if host_port and host_port in used_ports:
+                        used_ports.discard(host_port)
+                    running_containers.remove(c)
                     return jsonify({'success': False, 'message': '容器已过期'})
                 
                 return jsonify({
@@ -275,11 +296,15 @@ def get_container_by_vuln():
                 if len(parts) >= 2:
                     container_id = parts[0]
                     ports = ' '.join(parts[1:])
-                    if '0.0.0.0:' in ports and '->80/tcp' in ports:
-                        host_port = ports.split('0.0.0.0:')[1].split('->')[0].strip()
+                    if '0.0.0.0:' in ports:
+                        port_part = ports.split('0.0.0.0:')[1].split()[0]
+                        if '->' in port_part:
+                            host_port = int(port_part.split('->')[0].strip())
+                        else:
+                            host_port = int(port_part.strip())
                         
                         success_name, stdout_name, stderr_name = run_docker_command(
-                            f"docker inspect --format '{{.Name}}' {container_id}"
+                            f"docker inspect --format '{{{{.Name}}}}' {container_id}"
                         )
                         container_name = stdout_name.strip().lstrip('/') if success_name else f"container-{container_id[:8]}"
                         

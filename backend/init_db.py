@@ -5,8 +5,8 @@ import pymysql
 def create_database():
     conn = pymysql.connect(
         host='localhost',
-        user='Mlai',
-        password='1234',
+        user='root',
+        password='rootpass',
         cursorclass=pymysql.cursors.DictCursor
     )
     cursor = conn.cursor()
@@ -22,8 +22,8 @@ def create_database():
 def init_db():
     conn = pymysql.connect(
         host='localhost',
-        user='Mlai',
-        password='1234',
+        user='root',
+        password='rootpass',
         database='mlai_lab',
         cursorclass=pymysql.cursors.DictCursor
     )

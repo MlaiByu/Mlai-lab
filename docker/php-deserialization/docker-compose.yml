@@ -1,6 +1,8 @@
 services:
   web:
-    build: .
+    image: php:7.4-apache
     restart: always
     ports:
       - "${HOST_PORT}:80"
+    volumes:
+      - ./www:/var/www/html
