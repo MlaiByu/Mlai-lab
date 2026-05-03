@@ -137,17 +137,17 @@ export const experiment = {
 }
 
 export const container = {
-  create: (vulnerabilityType) => {
+  create: (vulnerabilityType, userId, sessionId) => {
     return request('/container/create', {
       method: 'POST',
-      body: JSON.stringify({ vulnerability_type: vulnerabilityType })
+      body: JSON.stringify({ vulnerability_type: vulnerabilityType, user_id: userId, session_id: sessionId })
     })
   },
   
-  getByVuln: (vulnerabilityType) => {
+  getByVuln: (vulnerabilityType, userId) => {
     return request('/container/get_by_vuln', {
       method: 'POST',
-      body: JSON.stringify({ vulnerability_type: vulnerabilityType })
+      body: JSON.stringify({ vulnerability_type: vulnerabilityType, user_id: userId })
     })
   },
   

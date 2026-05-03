@@ -3,11 +3,11 @@
     <div class="challenges-header">
       <h1>Challenges</h1>
     </div>
-    
+
     <div class="challenges-container">
       <aside class="sidebar">
-        <div 
-          v-for="category in categories" 
+        <div
+          v-for="category in categories"
           :key="category.id"
           :class="['category-item', { active: selectedCategory === category.id }]"
           @click="selectCategory(category.id)"
@@ -20,8 +20,8 @@
         <div class="chapter-section">
           <h2 class="chapter-title">{{ currentCategoryName }}</h2>
           <div class="challenges-grid">
-            <div 
-              v-for="vuln in filteredVulnerabilities" 
+            <div
+              v-for="vuln in filteredVulnerabilities"
               :key="vuln.id"
               :class="['challenge-card', getStatus(vuln.type)]"
               @click="openChallengeModal(vuln)"
@@ -40,7 +40,7 @@
 
         <div class="modal-body">
           <h2 class="challenge-title">{{ selectedChallenge?.name }}</h2>
-          
+
           <div class="challenge-description">
             <p>本系列题目FLAG格式固定为Mlai{xxxxxx}</p>
             <p>{{ selectedChallenge?.description }}</p>
@@ -59,9 +59,9 @@
           <div class="target-info">
             <h3>靶场信息</h3>
             <div v-if="!currentContainer" class="start-environment">
-              <button 
-                class="btn-start-env" 
-                @click="startEnvironment" 
+              <button
+                class="btn-start-env"
+                @click="startEnvironment"
                 :disabled="isStarting"
               >
                 {{ isStarting ? '启动中...' : '启动靶场环境' }}
@@ -84,10 +84,10 @@
           </div>
 
           <div class="flag-submit">
-            <input 
-              type="text" 
-              v-model="flagInput" 
-              placeholder="Flag" 
+            <input
+              type="text"
+              v-model="flagInput"
+              placeholder="Flag"
               class="flag-input"
             />
             <button class="btn-submit" @click="submitFlag" :disabled="isSubmitting">
@@ -178,18 +178,29 @@ const filteredVulnerabilities = computed(() => {
 })
 
 const getStatus = (type) => {
-  const record = store.state.experimentRecords.find(r => r.vulnerability_type === type)
-  
-  if (record && record.success_count > 0) {
+  const userId = store.state.user?.id
+  if (!userId) {
+    return 'pending'
+  }
+
+  const record = store.state.experimentRecords.find(
+    r => r.vulnerability_type === type
+  )
+
+  if (!record) {
+    return 'pending'
+  }
+
+  if (record.success_count > 0) {
     return 'completed'
   }
-  
-  if (record && record.start_time) {
+
+  if (record.start_time) {
     try {
       const elapsed = (Date.now() - new Date(record.start_time).getTime()) / 1000
       const isTimeExpired = elapsed >= 3600
       const isMarkedExpired = record.is_expired === 1 || record.is_expired === true
-      
+
       if (elapsed < 3600 && !isMarkedExpired) {
         return 'in_progress'
       }
@@ -197,7 +208,7 @@ const getStatus = (type) => {
       console.error('解析时间失败:', e)
     }
   }
-  
+
   return 'pending'
 }
 
@@ -229,12 +240,12 @@ const openChallengeModal = async (vuln) => {
   flagInput.value = ''
   flagResult.value = null
   currentContainer.value = null
-  
+
   try {
-    const response = await containerApi.getByVuln(vuln.type)
+    const response = await containerApi.getByVuln(vuln.type, store.state.user?.id || 0)
     if (response.success) {
       currentContainer.value = response
-      
+
       if (response.timeout_at) {
         const remaining = Math.max(0, Math.floor(response.timeout_at - Date.now() / 1000))
         if (remaining > 0) {
@@ -260,7 +271,7 @@ const closeChallengeModal = () => {
   currentContainer.value = null
   showSolution.value = false
   currentSolution.value = ''
-  
+
   if (countdownTimer) {
     clearInterval(countdownTimer)
     countdownTimer = null
@@ -269,16 +280,16 @@ const closeChallengeModal = () => {
 
 const startEnvironment = async () => {
   if (!selectedChallenge.value) return
-  
+
   isStarting.value = true
-  
+
   try {
     const experimentResponse = await experimentApi.start(store.state.user?.id || 0, selectedChallenge.value.type)
     if (experimentResponse.sessionId) {
       currentSessionId.value = experimentResponse.sessionId
     }
-    
-    const response = await containerApi.create(selectedChallenge.value.type)
+
+    const response = await containerApi.create(selectedChallenge.value.type, store.state.user?.id || 0, currentSessionId.value)
     if (response.success) {
       currentContainer.value = response
       startCountdown()
@@ -296,23 +307,23 @@ const startEnvironment = async () => {
 const startCountdown = () => {
   const startTime = Date.now()
   const totalSeconds = 3600
-  
+
   remainingTime.value = '01:00:00'
-  
+
   if (countdownTimer) {
     clearInterval(countdownTimer)
   }
-  
+
   countdownTimer = setInterval(() => {
     const elapsed = Math.floor((Date.now() - startTime) / 1000)
     const remaining = Math.max(0, totalSeconds - elapsed)
-    
+
     const hours = Math.floor(remaining / 3600)
     const minutes = Math.floor((remaining % 3600) / 60)
     const secs = remaining % 60
-    
+
     remainingTime.value = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-    
+
     if (remaining <= 0) {
       clearInterval(countdownTimer)
       countdownTimer = null
@@ -325,26 +336,26 @@ const startCountdown = () => {
 const startCountdownWithRemaining = (remainingSeconds) => {
   const startTime = Date.now()
   const totalSeconds = remainingSeconds
-  
+
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const secs = totalSeconds % 60
   remainingTime.value = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  
+
   if (countdownTimer) {
     clearInterval(countdownTimer)
   }
-  
+
   countdownTimer = setInterval(() => {
     const elapsed = Math.floor((Date.now() - startTime) / 1000)
     const remaining = Math.max(0, totalSeconds - elapsed)
-    
+
     const hours = Math.floor(remaining / 3600)
     const minutes = Math.floor((remaining % 3600) / 60)
     const secs = remaining % 60
-    
+
     remainingTime.value = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-    
+
     if (remaining <= 0) {
       clearInterval(countdownTimer)
       countdownTimer = null
@@ -356,12 +367,12 @@ const startCountdownWithRemaining = (remainingSeconds) => {
 
 const stopEnvironment = async () => {
   if (!currentContainer.value) return
-  
+
   if (countdownTimer) {
     clearInterval(countdownTimer)
     countdownTimer = null
   }
-  
+
   try {
     await containerApi.remove(
       currentContainer.value.container_id,
@@ -369,11 +380,11 @@ const stopEnvironment = async () => {
       selectedChallenge.value?.type || '',
       currentSessionId.value || ''
     )
-    
+
     currentSessionId.value = ''
-    
+
     currentContainer.value = null
-    
+
     await store.actions.loadExperimentRecords()
   } catch (error) {
     console.error('停止容器失败:', error)
@@ -385,9 +396,9 @@ const submitFlag = async () => {
     flagResult.value = { success: false, message: '请输入Flag' }
     return
   }
-  
+
   isSubmitting.value = true
-  
+
   try {
     const response = await experimentApi.submit({
       user_id: store.state.user?.id || 0,
@@ -395,7 +406,7 @@ const submitFlag = async () => {
       flag: flagInput.value,
       session_id: currentSessionId.value
     })
-    
+
     if (response.success) {
       flagResult.value = { success: true, message: '🎉 Flag正确！挑战成功！' }
       await store.actions.loadExperimentRecords()
