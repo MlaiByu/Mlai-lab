@@ -1,28 +1,68 @@
 services:
   mysql:
     image: mysql:5.7
-    restart: always
+    restart: "no"
+    mem_limit: 512m
+    memswap_limit: 1g
+    cpus: 0.5
+    ulimits:
+      nproc: 256
+      nofile:
+        soft: 1024
+        hard: 1024
     environment:
       MYSQL_ROOT_PASSWORD: rootpass
       MYSQL_DATABASE: sqli_db
+    tmpfs:
+      - /var/lib/mysql:rw,size=256m
+      - /tmp:rw,size=64m
+      - /var/run/mysqld:rw,size=32m
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
+      start_period: 10s
+    labels:
+      - "mlai-lab-vulnerability=true"
+
   web:
     image: php:7.4-apache
-    restart: always
+    restart: "no"
+    mem_limit: 512m
+    memswap_limit: 1g
+    cpus: 0.5
+    ulimits:
+      nproc: 128
+      nofile:
+        soft: 1024
+        hard: 1024
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,size=64m,uid=33,gid=33
+      - /var/run/apache2:rw,size=64m,uid=33,gid=33
+      - /var/log/apache2:rw,size=32m,uid=33,gid=33
+      - /usr/src/php:rw,size=128m
     ports:
       - "${HOST_PORT}:80"
     volumes:
-      - ./www:/var/www/html
+      - ./www:/var/www/html:ro
     command: >
-      bash -c "docker-php-ext-install mysqli pdo pdo_mysql && 
-               docker-php-ext-enable mysqli pdo_mysql && 
+      bash -c "docker-php-ext-install mysqli pdo pdo_mysql &&
+               docker-php-ext-enable mysqli pdo_mysql &&
                apache2-foreground"
     depends_on:
       mysql:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "mlai-lab-vulnerability=true"

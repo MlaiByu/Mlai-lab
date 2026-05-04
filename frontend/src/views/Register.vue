@@ -4,7 +4,6 @@
     
     <el-card class="register-card" shadow="none">
       <div class="logo-section">
-        <div class="logo-icon">👋</div>
         <h1>用户注册</h1>
         <p>创建您的 Mlai-Lab 账号</p>
       </div>
@@ -180,11 +179,6 @@ const goToLogin = () => {
 .logo-section {
   text-align: center;
   margin-bottom: 2.5rem;
-}
-
-.logo-icon {
-  font-size: 3.5rem;
-  margin-bottom: 1rem;
 }
 
 .logo-section h1 {

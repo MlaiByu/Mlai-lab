@@ -58,9 +58,6 @@
           <el-button type="text" @click="goToRegister" class="register-btn">立即注册</el-button>
         </div>
         
-        <div class="demo-hint">
-          <span>演示账户: admin / password</span>
-        </div>
       </el-card>
     </div>
   </div>
@@ -233,13 +230,7 @@ const goToRegister = () => {
   color: #0284c7;
 }
 
-.demo-hint {
-  text-align: center;
-  color: #94a3b8;
-  font-size: 0.85rem;
-  padding-top: 1rem;
-  border-top: 1px solid #e2e8f0;
-}
+
 
 :deep(.el-input__wrapper) {
   border-radius: 14px;

@@ -1,0 +1,1 @@
+0 * * * * cd /root/Mlai-lab && bash /root/Mlai-lab/scripts/cleanup-containers.sh >> /root/Mlai-lab/log/cleanup_cron.log 2>&1

@@ -28,7 +28,7 @@ log "Node: $(node --version)"
 
 log "========== 初始化数据库 =========="
 
-mysql -u root -p1234 <<EOF 2>/dev/null
+mysql -u Mlai -p1234 <<EOF 2>/dev/null
 CREATE DATABASE IF NOT EXISTS mlai_lab CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 EOF
 

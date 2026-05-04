@@ -1,9 +1,30 @@
 services:
   web:
     image: python:3.9-slim
-    restart: always
+    restart: "no"
+    mem_limit: 512m
+    memswap_limit: 1g
+    cpus: 0.5
+    ulimits:
+      nproc: 128
+      nofile:
+        soft: 1024
+        hard: 1024
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,size=64m
     ports:
       - "${HOST_PORT}:8000"
     volumes:
-      - ./www:/app
+      - ./www:/app:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "mlai-lab-vulnerability=true"
     command: python server.py

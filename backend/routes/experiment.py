@@ -16,25 +16,6 @@ import uuid
 
 experiment_bp = Blueprint('experiment', __name__)
 
-def update_or_insert_record(user_id, vulnerability_type, success, now):
-    record = get_experiment_record(user_id, vulnerability_type)
-    if record:
-        update_experiment_record(
-            user_id, vulnerability_type,
-            success_count=int(record['success_count']) + success,
-            attempt_count=int(record['attempt_count']) + 1,
-            last_attempt=now,
-            first_success=record['first_success'] or (now if success else None),
-            total_time=float(record['total_time']) + 0.1
-        )
-    else:
-        insert_experiment_record(
-            user_id, vulnerability_type,
-            attempt_count=1, success_count=success,
-            last_attempt=now, first_success=now if success else None,
-            total_time=0.1, start_time=now
-        )
-
 @experiment_bp.route('/api/experiment/start', methods=['POST'])
 def start_experiment():
     data = request.get_json()
@@ -62,45 +43,56 @@ def complete_experiment():
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
 
     record = get_experiment_record(user_id, experiment_key)
-    success_count = int(record['success_count']) + 1 if record else 1
-    total_count = int(record['attempt_count']) + 1 if record else 1
+    if record:
+        record_success = record.get('success_count', 0)
+        new_success = record_success + 1
+        update_experiment_record(user_id, experiment_key,
+            success_count=new_success,
+            success=1,
+            end_time=now,
+            is_expired=1
+        )
+    else:
+        insert_experiment_record(user_id, experiment_key, attempt_count=1, success_count=1, success=1, start_time=now, end_time=now, last_attempt=now, is_expired=0)
 
-    update_or_insert_record(user_id, experiment_key, 1, now)
     if session_id:
         update_experiment_session(session_id, end_time=now, success=1)
 
-    return jsonify({"success": True, "message": "实验完成", "successCount": success_count, "totalCount": total_count})
+    return jsonify({"success": True, "message": "实验完成"})
 
 @experiment_bp.route('/api/experiment/records', methods=['GET'])
 def get_experiment_records_route():
     user_id = request.args.get('userId', 0)
     records = get_experiment_records(user_id)
-    now = datetime.datetime.now()
+    now_dt = datetime.datetime.now()
+    now_str = now_dt.strftime('%Y-%m-%d %H:%M')
 
     result = []
     for record in records:
         is_expired = bool(record.get('is_expired', 0))
         remaining_time = 0
 
-        if not is_expired and record['start_time']:
+        if not is_expired and record.get('start_time'):
             try:
                 start_time = datetime.datetime.strptime(record['start_time'], '%Y-%m-%d %H:%M')
-                elapsed = (now - start_time).total_seconds()
-                if elapsed > 3600 and record['success_count'] == 0:
+                elapsed = (now_dt - start_time).total_seconds()
+                if elapsed > 3600 and record.get('success_count', 0) == 0:
                     is_expired = True
-                    update_experiment_record(user_id, record['vulnerability_type'], is_expired=1)
+                    update_experiment_record(user_id, record['vulnerability_type'], is_expired=1, end_time=now_str)
                 remaining_time = max(0, 3600 - elapsed)
             except:
                 pass
 
         result.append({
             "vulnerability_type": record['vulnerability_type'],
-            "attempt_count": record['attempt_count'],
-            "success_count": record['success_count'],
-            "last_attempt": record['last_attempt'],
-            "first_success": record['first_success'],
-            "total_time": round(float(record['total_time']), 2),
-            "start_time": record['start_time'],
+            "attempt_count": record.get('attempt_count', 0),
+            "success_count": record.get('success_count', 0),
+            "success": record.get('success', 0),
+            "last_attempt": record.get('last_attempt'),
+            "first_success": record.get('first_success'),
+            "total_time": round(float(record.get('total_time', 0)), 2),
+            "start_time": record.get('start_time'),
+            "end_time": record.get('end_time'),
             "remaining_time": round(remaining_time),
             "is_expired": is_expired
         })
@@ -125,11 +117,22 @@ def submit_flag():
 
     if success:
         record = get_experiment_record(user_id, vulnerability_type)
-        if record:
-            update_experiment_record(user_id, vulnerability_type, success_count=int(record['success_count']) + 1)
         if session_id:
             update_experiment_session(session_id, end_time=now, success=1)
-        update_experiment_record(user_id, vulnerability_type, is_expired=1)
+        if record:
+            new_success = int(record.get('success_count', 0)) + 1
+            update_experiment_record(user_id, vulnerability_type,
+                success_count=new_success,
+                success=1,
+                end_time=now,
+                is_expired=1
+            )
+        else:
+            insert_experiment_record(user_id, vulnerability_type,
+                attempt_count=1, success_count=1, success=1,
+                start_time=now, end_time=now, last_attempt=now,
+                is_expired=0
+            )
         return jsonify({"success": True, "message": "Flag正确！挑战成功！"})
     else:
         return jsonify({"success": False, "message": "Flag错误，请重试"})

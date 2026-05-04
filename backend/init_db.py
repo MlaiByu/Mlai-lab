@@ -1,18 +1,19 @@
 import hashlib
 import datetime
 import pymysql
+from config import Config
 
 def create_database():
     conn = pymysql.connect(
-        host='localhost',
-        user='Mlai',
-        password='1234',
+        host=Config.DB_HOST,
+        user=Config.DB_USER,
+        password=Config.DB_PASSWORD,
         cursorclass=pymysql.cursors.DictCursor
     )
     cursor = conn.cursor()
     
     try:
-        cursor.execute("CREATE DATABASE IF NOT EXISTS mlai_lab")
+        cursor.execute("CREATE DATABASE IF NOT EXISTS {}".format(Config.DB_NAME))
         print("Database created or already exists")
     except Exception as e:
         print(f"Error creating database: {e}")
@@ -21,10 +22,10 @@ def create_database():
 
 def init_db():
     conn = pymysql.connect(
-        host='localhost',
-        user='Mlai',
-        password='1234',
-        database='mlai_lab',
+        host=Config.DB_HOST,
+        user=Config.DB_USER,
+        password=Config.DB_PASSWORD,
+        database=Config.DB_NAME,
         cursorclass=pymysql.cursors.DictCursor
     )
     cursor = conn.cursor()
@@ -50,6 +51,7 @@ def init_db():
             first_success VARCHAR(50),
             total_time DECIMAL(10,2) NOT NULL DEFAULT 0,
             start_time VARCHAR(50),
+            end_time VARCHAR(50),
             is_expired INTEGER NOT NULL DEFAULT 0,
             remaining_time INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id)
@@ -124,7 +126,9 @@ def init_db():
             ('DOM型XSS', 'Mlai{xss_dom_flag}', '1. 这是一个DOM型XSS漏洞\n2. 漏洞存在于前端JavaScript代码中\n3. 查看页面源码，找到处理用户输入的JavaScript\n4. 通常是通过location.hash或URL参数直接操作DOM', 'DOM型XSS漏洞，前端JavaScript处理不当', 'medium', 'xss'),
             ('PHP反序列化', 'Mlai{php_unserialize_flag}', '1. 这是一个PHP反序列化漏洞\n2. 程序会反序列化用户输入的数据\n3. 首先需要找到目标类的定义\n4. 构造恶意的序列化字符串\n5. 触发__wakeup或__destruct等魔术方法', 'PHP反序列化漏洞', 'hard', 'deserialization'),
             ('Python反序列化', 'Mlai{python_pickle_flag}', '1. 这是一个Python pickle反序列化漏洞\n2. pickle模块是不安全的，不要反序列化不信任的数据\n3. 构造恶意的pickle数据\n4. 可以使用__reduce__方法执行任意命令', 'Python pickle反序列化漏洞', 'hard', 'deserialization'),
-            ('文件上传', 'Mlai{file_upload_flag}', '1. 这是一个文件上传漏洞\n2. 尝试上传.php文件\n3. 如果有MIME类型检查，可以通过修改Content-Type绕过\n4. 如果有扩展名检查，可以尝试.php5、.php3或双重扩展名', '文件上传漏洞', 'medium', 'upload')
+            ('文件上传', 'Mlai{file_upload_flag}', '1. 这是一个文件上传漏洞\n2. 尝试上传.php文件\n3. 如果有MIME类型检查，可以通过修改Content-Type绕过\n4. 如果有扩展名检查，可以尝试.php5、.php3或双重扩展名', '文件上传漏洞', 'medium', 'upload'),
+            ('CSRF-Easy', 'Mlai{CSRF-Easy-Success}', '1. 这是一个无任何CSRF防护的漏洞\n2. 构造一个恶意页面，包含自动提交的表单\n3. 表单的action指向目标URL\n4. 输入框中填入要修改的数据（密码改成hacked!）\n5. 诱骗已登录的用户访问恶意页面\n6. 访问?get_flag=1获取flag', 'CSRF跨站请求伪造漏洞，无任何防护', 'easy', 'csrf'),
+            ('CSRF-Hard', 'Mlai{CSRF-Hard-Success}', '1. 这是一个有Referer检查的CSRF漏洞\n2. Referer检查使用了strpos($referer, $host) !== false\n3. 可以通过构造URL子域名或路径来绕过\n4. 如：构造http://target-server.attacker.com 或者 http://attacker.com/target-server.com\n5. 完成任务：转账999元给attacker + 修改密码为hacked! + 访问?get_flag=1', 'CSRF跨站请求伪造漏洞，有Referer检查但可绕过', 'hard', 'csrf')
         ]
         now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
         for vuln in vulnerabilities_data:

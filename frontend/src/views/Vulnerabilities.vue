@@ -115,6 +115,7 @@ const router = useRouter()
 const categories = ref([
   { id: 'sqli', name: 'SQL注入', icon: '' },
   { id: 'xss', name: 'XSS攻击', icon: '' },
+  { id: 'csrf', name: 'CSRF攻击', icon: '' },
   { id: 'deserialization', name: '反序列化', icon: '' },
   { id: 'upload', name: '文件上传', icon: '' }
 ])
@@ -424,7 +425,7 @@ const submitFlag = async () => {
     })
 
     if (response.success) {
-      flagResult.value = { success: true, message: '🎉 Flag正确！挑战成功！' }
+      flagResult.value = { success: true, message: 'Flag正确！挑战成功！' }
       await store.actions.loadExperimentRecords()
       await stopEnvironment()
     } else {

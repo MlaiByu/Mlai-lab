@@ -5,157 +5,152 @@ import time
 import subprocess
 import json
 import datetime
+from config import Config
+import threading
+import re
 
 container_bp = Blueprint('container', __name__)
 
-CONTAINER_LABEL = "mlai-lab-vulnerability"
-
 running_containers = []
-
-PORT_MIN = 10000
-PORT_MAX = 13000
-
 used_ports = set()
+port_cache = {'ports': set(), 'timestamp': 0}
+PORT_CACHE_TTL = 5
+
+lock = threading.Lock()
+
+def get_cached_ports():
+    current_time = time.time()
+    if current_time - port_cache['timestamp'] < PORT_CACHE_TTL:
+        return port_cache['ports'].copy()
+    port_cache['ports'] = _scan_used_ports()
+    port_cache['timestamp'] = current_time
+    return port_cache['ports'].copy()
+
+def _scan_used_ports():
+    ports = set()
+    try:
+        result = subprocess.run(
+            "ss -tlnp 2>/dev/null | awk 'NR>1{print $4}' | grep -oE '[0-9]+$'",
+            shell=True, capture_output=True, text=True, timeout=2
+        )
+        for line in result.stdout.strip().split('\n'):
+            if line.isdigit():
+                ports.add(int(line))
+    except:
+        pass
+
+    try:
+        result = subprocess.run(
+            "docker ps --format '{{.Ports}}' 2>/dev/null",
+            shell=True, capture_output=True, text=True, timeout=5
+        )
+        for match in re.findall(r':(\d+)->', result.stdout):
+            ports.add(int(match))
+    except:
+        pass
+
+    with lock:
+        ports.update(used_ports)
+
+    return ports
 
 def get_available_port():
-    for port in range(PORT_MIN, PORT_MAX + 1):
-        if port in used_ports:
-            continue
-        result = subprocess.run(
-            f"netstat -tlnp 2>/dev/null | grep :{port}",
-            shell=True, capture_output=True, text=True
-        )
-        if result.returncode != 0:
-            result_docker = subprocess.run(
-                f"docker ps --format '{{{{.Ports}}}}' 2>/dev/null | grep -E ':{port}->'",
-                shell=True, capture_output=True, text=True
-            )
-            if result_docker.returncode != 0:
+    with lock:
+        all_used = get_cached_ports()
+        for port in range(Config.PORT_MIN, Config.PORT_MAX + 1):
+            if port not in all_used and port not in used_ports:
                 used_ports.add(port)
                 return port
-    return None
+        return None
 
-tag_map = {
-    'SQL注入-入门': 'sqli-easy',
-    'SQL注入-中级': 'sqli-medium',
-    'SQL注入-高级': 'sqli-hard',
-    '反射型XSS': 'xss-reflected',
-    '存储型XSS': 'xss-stored',
-    'DOM型XSS': 'xss-dom',
-    'PHP反序列化': 'php-deserialization',
-    'Python反序列化': 'python-deserialization',
-    '文件上传': 'file-upload'
-}
+tag_map = Config.DOCKER_VULN_MAP
+docker_run_configs = Config.DOCKER_CONFIGS
 
-docker_run_configs = {
-    'SQL注入-入门': {
-        'use_docker_compose': True,
-        'port': 80
-    },
-    'SQL注入-中级': {
-        'use_docker_compose': True,
-        'port': 80
-    },
-    'SQL注入-高级': {
-        'use_docker_compose': True,
-        'port': 80
-    },
-    '反射型XSS': {
-        'use_docker_compose': True,
-        'port': 80
-    },
-    '存储型XSS': {
-        'use_docker_compose': True,
-        'port': 80
-    },
-    'DOM型XSS': {
-        'use_docker_compose': True,
-        'port': 80
-    },
-    'PHP反序列化': {
-        'image': 'php:7.4-apache',
-        'port': 80,
-        'volumes': {'./www': '/var/www/html'},
-        'env': {}
-    },
-    'Python反序列化': {
-        'image': 'python:3.9-slim',
-        'port': 8000,
-        'volumes': {'./www': '/app'},
-        'command': 'python server.py',
-        'env': {}
-    },
-    '文件上传': {
-        'image': 'php:7.4-apache',
-        'port': 80,
-        'volumes': {'./www': '/var/www/html'},
-        'env': {}
-    }
-}
-
-def run_docker_command(cmd):
+def run_docker_command(cmd, timeout=30):
     try:
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-        return result.returncode == 0, result.stdout.strip(), result.stderr.strip()
+        proc = subprocess.run(
+            cmd, shell=True, capture_output=True, text=True, timeout=timeout
+        )
+        return proc.returncode == 0, proc.stdout.strip(), proc.stderr.strip()
+    except subprocess.TimeoutExpired:
+        return False, '', '命令执行超时'
     except Exception as e:
         return False, '', str(e)
 
+def docker_compose_up(docker_dir, project_name, host_port):
+    env_file = os.path.join(docker_dir, '.env')
+    with open(env_file, 'w') as f:
+        f.write(f"HOST_PORT={host_port}\n")
+
+    success, stdout, stderr = run_docker_command(
+        f"cd {docker_dir} && HOST_PORT={host_port} docker compose -p {project_name} up -d",
+        timeout=60
+    )
+    return success, stdout, stderr
+
+def docker_compose_down(docker_dir, project_name):
+    return run_docker_command(
+        f"cd {docker_dir} && docker compose -p {project_name} down",
+        timeout=30
+    )
+
+def get_container_id_from_compose(docker_dir, project_name):
+    for _ in range(3):
+        success, stdout, _ = run_docker_command(
+            f"cd {docker_dir} && docker compose -p {project_name} ps -q web",
+            timeout=10
+        )
+        if success and stdout.strip():
+            return stdout.strip()[:12]
+        time.sleep(0.5)
+    return None
+
 def cleanup_expired_containers(user_id=None):
-    expired_containers = []
+    expired = []
+    current_time = time.time()
     for c in running_containers:
         if user_id and c.get('user_id') != user_id:
             continue
-        try:
-            start_time = datetime.datetime.fromisoformat(c.get('created_at', ''))
-            now = datetime.datetime.now()
-            elapsed = (now - start_time).total_seconds()
-            if elapsed > 3600:
-                expired_containers.append(c)
-        except:
-            pass
+        if c.get('timeout_at') and current_time > c['timeout_at']:
+            expired.append(c)
+    for c in expired:
+        _async_remove(c)
 
-    for c in expired_containers:
-        container_id = c.get('id')
-        if container_id:
-            if c.get('use_docker_compose'):
-                project_name = c.get('project_name')
-                docker_dir = c.get('docker_dir')
-                if project_name and docker_dir:
-                    run_docker_command(
-                        f"cd {docker_dir} && docker compose -p {project_name} down -v"
-                    )
-            else:
-                run_docker_command(f"docker rm -f {container_id}")
+def _async_remove(container_info):
+    def _remove():
+        cid = container_info.get('id')
+        pn = container_info.get('project_name')
+        dd = container_info.get('docker_dir')
+        hp = container_info.get('host_port')
+        uid = container_info.get('user_id')
+        vt = container_info.get('vulnerability_type')
+        sid = container_info.get('session_id')
 
-        host_port = c.get('host_port')
-        if host_port and host_port in used_ports:
-            used_ports.discard(host_port)
+        if container_info.get('use_docker_compose') and pn and dd:
+            docker_compose_down(dd, pn)
+        elif cid:
+            run_docker_command(f"docker rm -f {cid}", timeout=10)
 
-        if c in running_containers:
-            running_containers.remove(c)
+        with lock:
+            if cid:
+                for c in running_containers:
+                    if c['id'] == cid:
+                        running_containers.remove(c)
+                        break
+            if hp:
+                used_ports.discard(hp)
 
-def cleanup_all_containers():
-    containers_to_remove = running_containers.copy()
+        if uid and vt:
+            try:
+                from utils.db import update_experiment_record, update_experiment_session
+                now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+                update_experiment_record(uid, vt, end_time=now, is_expired=1)
+                if sid:
+                    update_experiment_session(sid, end_time=now, success=0)
+            except:
+                pass
 
-    for c in containers_to_remove:
-        container_id = c.get('id')
-        if container_id:
-            if c.get('use_docker_compose'):
-                project_name = c.get('project_name')
-                docker_dir = c.get('docker_dir')
-                if project_name and docker_dir:
-                    run_docker_command(
-                        f"cd {docker_dir} && docker compose -p {project_name} down -v"
-                    )
-            else:
-                run_docker_command(f"docker rm -f {container_id}")
-
-        host_port = c.get('host_port')
-        if host_port and host_port in used_ports:
-            used_ports.discard(host_port)
-
-        if c in running_containers:
-            running_containers.remove(c)
+    threading.Thread(target=_remove, daemon=True).start()
 
 @container_bp.route('/api/container/create', methods=['POST'])
 def create_container():
@@ -165,128 +160,79 @@ def create_container():
         user_id = data.get('user_id', 0)
         session_id = data.get('session_id', '')
 
-        if not vulnerability_type:
-            return jsonify({'success': False, 'message': '漏洞类型不能为空'}), 400
-
-        if not isinstance(vulnerability_type, str):
-            return jsonify({'success': False, 'message': '漏洞类型必须是字符串'}), 400
+        if not vulnerability_type or not isinstance(vulnerability_type, str):
+            return jsonify({'success': False, 'message': '漏洞类型无效'}), 400
 
         cleanup_expired_containers(user_id)
 
         type_tag = tag_map.get(vulnerability_type, vulnerability_type.lower().replace(' ', '-'))
-        project_name = f"mlai-lab-{type_tag}-{uuid.uuid4().hex[:8]}"
-
-        success_docker, stdout_docker, stderr_docker = run_docker_command("docker info")
-        if not success_docker:
-            return jsonify({'success': False, 'message': 'Docker服务不可用'}), 500
-
+        project_name = f"mlai-{type_tag[:8]}-{uuid.uuid4().hex[:6]}"
         docker_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'docker', type_tag))
+
+        if not os.path.exists(docker_dir):
+            return jsonify({'success': False, 'message': '漏洞环境不存在'}), 404
 
         host_port = get_available_port()
         if not host_port:
-            return jsonify({'success': False, 'message': '端口范围内没有可用端口'}), 500
+            return jsonify({'success': False, 'message': '没有可用端口'}), 500
 
         config = docker_run_configs.get(vulnerability_type, {})
+        use_compose = config.get('use_docker_compose', False)
 
-        if config.get('use_docker_compose'):
-            env_file = os.path.join(docker_dir, '.env')
-            with open(env_file, 'w') as f:
-                f.write(f"HOST_PORT={host_port}\n")
+        if use_compose:
+            success, stdout, stderr = docker_compose_up(docker_dir, project_name, host_port)
+            if not success:
+                with lock:
+                    used_ports.discard(host_port)
+                return jsonify({'success': False, 'message': f'启动失败: {stderr}'}), 500
 
-            cmd = f"cd {docker_dir} && HOST_PORT={host_port} docker compose -p {project_name} up -d"
-            success_run, stdout_run, stderr_run = run_docker_command(cmd)
-
-            if not success_run:
-                return jsonify({'success': False, 'message': f'启动容器失败: {stderr_run}'}), 500
-
-            time.sleep(5)
-
-            success_ps, stdout_ps, stderr_ps = run_docker_command(
-                f"cd {docker_dir} && docker compose -p {project_name} ps -q web"
-            )
-
-            if not success_ps or not stdout_ps.strip():
-                return jsonify({'success': False, 'message': '获取容器ID失败'}), 500
-
-            container_id = stdout_ps.strip()[:12]
-
-            container_info = {
-                'id': container_id,
-                'name': project_name,
-                'status': 'running',
-                'vulnerability_type': vulnerability_type,
-                'host_port': host_port,
-                'use_docker_compose': True,
-                'project_name': project_name,
-                'docker_dir': docker_dir,
-                'user_id': user_id,
-                'session_id': session_id,
-                'created_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-                'timeout_at': time.time() + 3600
-            }
-            running_containers.append(container_info)
-
-            return jsonify({
-                'success': True,
-                'container_id': container_id,
-                'container_name': project_name,
-                'host_port': host_port,
-                'vulnerability_type': vulnerability_type,
-                'message': '容器创建成功'
-            })
+            container_id = get_container_id_from_compose(docker_dir, project_name)
+            if not container_id:
+                with lock:
+                    used_ports.discard(host_port)
+                docker_compose_down(docker_dir, project_name)
+                return jsonify({'success': False, 'message': '容器启动超时'}), 500
         else:
             image = config.get('image', 'php:7.4-apache')
             container_port = config.get('port', 80)
             volumes = config.get('volumes', {})
             env_vars = config.get('env', {})
-            command = config.get('command', '')
+            cmd_extra = config.get('command', '')
 
-            volume_str = ""
-            for host_path, container_path in volumes.items():
-                abs_host_path = os.path.join(docker_dir, host_path)
-                volume_str += f"-v {abs_host_path}:{container_path} "
+            volume_str = ' '.join(f"-v {os.path.join(docker_dir, hp)}:{cp}" for hp, cp in volumes.items())
+            env_str = ' '.join(f"-e {k}={v}" for k, v in env_vars.items())
+            full_cmd = f"docker run -d --name {project_name} -p {host_port}:{container_port} {volume_str} {env_str} --label {Config.CONTAINER_LABEL}={vulnerability_type} --stop-timeout 10 {image} {cmd_extra}"
 
-            env_str = ""
-            for key, value in env_vars.items():
-                env_str += f"-e {key}={value} "
+            success, stdout, stderr = run_docker_command(full_cmd, timeout=30)
+            if not success:
+                with lock:
+                    used_ports.discard(host_port)
+                return jsonify({'success': False, 'message': f'启动失败: {stderr}'}), 500
+            container_id = stdout.strip()[:12]
 
-            stop_timeout = 3600
+        container_info = {
+            'id': container_id,
+            'name': project_name,
+            'status': 'running',
+            'vulnerability_type': vulnerability_type,
+            'host_port': host_port,
+            'use_docker_compose': use_compose,
+            'project_name': project_name,
+            'docker_dir': docker_dir,
+            'user_id': user_id,
+            'session_id': session_id,
+            'timeout_at': time.time() + Config.EXPERIMENT_TIMEOUT
+        }
+        running_containers.append(container_info)
 
-            container_name = project_name
-            cmd = f"docker run -d --name {container_name} -p {host_port}:{container_port} {volume_str}{env_str}--label {CONTAINER_LABEL}={vulnerability_type} --stop-timeout {stop_timeout} {image}"
-
-            if command:
-                cmd = cmd + f" {command}"
-
-            success_run, stdout_run, stderr_run = run_docker_command(cmd)
-
-            if not success_run:
-                return jsonify({'success': False, 'message': f'启动容器失败: {stderr_run}'}), 500
-
-            container_id = stdout_run.strip()[:12]
-            time.sleep(2)
-
-            container_info = {
-                'id': container_id,
-                'name': container_name,
-                'status': 'running',
-                'vulnerability_type': vulnerability_type,
-                'host_port': host_port,
-                'user_id': user_id,
-                'session_id': session_id,
-                'created_at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
-                'timeout_at': time.time() + 3600
-            }
-            running_containers.append(container_info)
-
-            return jsonify({
-                'success': True,
-                'container_id': container_id,
-                'container_name': container_name,
-                'host_port': host_port,
-                'vulnerability_type': vulnerability_type,
-                'message': '容器创建成功'
-            })
+        return jsonify({
+            'success': True,
+            'container_id': container_id,
+            'container_name': project_name,
+            'host_port': host_port,
+            'vulnerability_type': vulnerability_type,
+            'message': '容器创建成功'
+        })
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
@@ -301,91 +247,83 @@ def remove_container(container_id):
 
         container_info = None
         for c in running_containers:
-            if c['id'] == container_id:
-                if c.get('user_id') != user_id:
-                    return jsonify({'success': False, 'message': '您没有权限删除此容器'}), 403
+            if c['id'] == container_id or c.get('name') == container_id:
                 container_info = c
                 break
 
         if not container_info:
-            return jsonify({'success': False, 'message': '容器不存在'}), 404
+            success, stdout, _ = run_docker_command(f"docker ps -q --no-trunc --filter name={container_id}", timeout=5)
+            if not stdout.strip():
+                return jsonify({'success': False, 'message': '容器不存在'}), 404
 
-        if container_info.get('use_docker_compose'):
-            project_name = container_info.get('project_name')
-            docker_dir = container_info.get('docker_dir')
-            if project_name and docker_dir:
-                success, stdout, stderr = run_docker_command(
-                    f"cd {docker_dir} && docker compose -p {project_name} down -v"
-                )
-        else:
-            success, stdout, stderr = run_docker_command(f"docker rm -f {container_id}")
+        _async_remove(container_info)
 
-        if success:
-            for c in running_containers:
-                if c['id'] == container_id:
-                    host_port = c.get('host_port')
-                    if host_port and host_port in used_ports:
-                        used_ports.discard(host_port)
-                    if c in running_containers:
-                        running_containers.remove(c)
-                    break
+        if user_id and vulnerability_type:
+            try:
+                from utils.db import update_experiment_record, update_experiment_session
+                now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+                update_experiment_record(user_id, vulnerability_type, end_time=now, is_expired=1)
+                if session_id:
+                    update_experiment_session(session_id, end_time=now, success=0)
+            except:
+                pass
 
-            if user_id and vulnerability_type:
-                try:
-                    from utils.db import update_experiment_record, update_experiment_session
-                    import datetime
-                    update_experiment_record(user_id, vulnerability_type, is_expired=1)
-                    if session_id:
-                        now = datetime.datetime.now().isoformat()
-                        update_experiment_session(session_id, end_time=now, success=0)
-                except Exception as e:
-                    pass
-
-            return jsonify({
-                'success': True,
-                'container_id': container_id,
-                'message': '容器已删除'
-            })
-        else:
-            return jsonify({'success': False, 'message': stderr}), 500
+        return jsonify({'success': True, 'container_id': container_id, 'message': '正在停止容器'})
 
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
+
+@container_bp.route('/api/container/status/<container_id>', methods=['GET'])
+def get_container_status(container_id):
+    for c in running_containers:
+        if c['id'] == container_id:
+            return jsonify({'success': True, 'status': c['status'], 'host_port': c.get('host_port')})
+    success, stdout, _ = run_docker_command(f"docker inspect {container_id} --format '{{{{.State.Running}}}}'", timeout=5)
+    return jsonify({'success': True, 'status': 'running' if stdout.strip() == 'true' else 'stopped'})
+
+@container_bp.route('/api/container/list', methods=['GET'])
+def list_containers():
+    user_id = request.args.get('user_id', request.args.get('userId', 0))
+    containers = [{
+        'id': c['id'],
+        'name': c['name'],
+        'status': c['status'],
+        'vulnerability_type': c['vulnerability_type'],
+        'host_port': c.get('host_port')
+    } for c in running_containers if user_id == 0 or c.get('user_id') == user_id]
+    return jsonify({'success': True, 'containers': containers})
 
 @container_bp.route('/api/container/get_by_vuln', methods=['POST'])
 def get_container_by_vuln():
-    data = request.get_json()
-    vulnerability_type = data.get('vulnerability_type')
-    user_id = data.get('user_id', 0)
-
-    if not vulnerability_type:
-        return jsonify({'success': False, 'message': '漏洞类型不能为空'}), 400
-
     try:
-        for c in running_containers:
-            if c['vulnerability_type'] == vulnerability_type and c['status'] == 'running' and c.get('user_id') == user_id:
-                if c.get('timeout_at') and time.time() >= c.get('timeout_at'):
-                    cleanup_expired_containers(user_id)
-                    return jsonify({'success': False, 'message': '容器已过期'})
+        data = request.get_json()
+        vulnerability_type = data.get('vulnerability_type')
+        user_id = data.get('user_id', 0)
 
+        cleanup_expired_containers(user_id)
+
+        for container in running_containers:
+            if container.get('vulnerability_type') == vulnerability_type and container.get('user_id') == user_id:
                 return jsonify({
                     'success': True,
-                    'container_id': c['id'],
-                    'container_name': c['name'],
-                    'host_port': c['host_port'],
-                    'vulnerability_type': c['vulnerability_type'],
-                    'timeout_at': c.get('timeout_at'),
-                    'status': c['status']
+                    'container_id': container.get('id'),
+                    'container_name': container.get('name'),
+                    'host_port': container.get('host_port'),
+                    'vulnerability_type': container.get('vulnerability_type'),
+                    'timeout_at': container.get('timeout_at')
                 })
 
-        return jsonify({'success': False, 'message': '没有运行中的容器'})
+        return jsonify({'success': False, 'message': '没有找到运行中的容器'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
-@container_bp.route('/api/container/cleanup_all', methods=['POST'])
-def cleanup_all_containers_route():
+
+@container_bp.route('/api/container/cleanup', methods=['POST'])
+def cleanup_all():
     try:
-        cleanup_all_containers()
-        return jsonify({'success': True, 'message': '所有容器已清理'})
+        run_docker_command(f"docker rm -f $(docker ps -q --filter label={Config.CONTAINER_LABEL}) 2>/dev/null", timeout=30)
+        running_containers.clear()
+        used_ports.clear()
+        return jsonify({'success': True, 'message': '已清理'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
