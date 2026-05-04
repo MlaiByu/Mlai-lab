@@ -1,7 +1,7 @@
 <?php
 $db_host = "mysql";
 $db_user = "root";
-$db_pwd  = "123456";
+$db_pwd  = "rootpass";
 $db_name = "sqli_db";
 
 try {

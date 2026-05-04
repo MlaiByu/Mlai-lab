@@ -3,15 +3,12 @@ from flask_cors import CORS
 import os
 
 from config import Config
-from utils.db import init_db
 from routes import register_routes
 
 app = Flask(__name__)
 CORS(app, origins=['*'])
 
 app.config.from_object(Config)
-
-init_db()
 
 register_routes(app)
 

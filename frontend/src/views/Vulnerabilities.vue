@@ -119,17 +119,29 @@ const categories = ref([
   { id: 'upload', name: '文件上传', icon: '' }
 ])
 
-const vulnerabilities = ref([
-  { name: 'SQL注入-入门', icon: '', description: '无过滤数字型注入，尝试使用 UNION SELECT 语句获取 flag 表中的 flag', level: 'low', type: 'SQL注入-入门', id: 1, category: 'sqli' },
-  { name: 'SQL注入-中级', icon: '', description: '字符型注入，注释符已被过滤，需要使用其他方法绕过获取隐藏的flag', level: 'medium', type: 'SQL注入-中级', id: 2, category: 'sqli' },
-  { name: 'SQL注入-高级', icon: '', description: '严格过滤多个关键字，需要使用编码或双写等技巧绕过获取flag', level: 'high', type: 'SQL注入-高级', id: 3, category: 'sqli' },
-  { name: '反射型XSS', icon: '', description: 'URL参数直接输出到页面，尝试注入JavaScript代码获取flag', level: 'low', type: '反射型XSS', id: 4, category: 'xss' },
-  { name: '存储型XSS', icon: '', description: '用户输入被存储到服务器并显示，尝试注入持久化的恶意脚本获取flag', level: 'medium', type: '存储型XSS', id: 5, category: 'xss' },
-  { name: 'DOM型XSS', icon: '', description: '前端JavaScript直接使用用户输入，不经过服务器处理，尝试注入代码获取flag', level: 'medium', type: 'DOM型XSS', id: 6, category: 'xss' },
-  { name: 'PHP反序列化', icon: '', description: 'PHP反序列化漏洞，尝试构造恶意序列化数据获取服务器上的flag', level: 'high', type: 'PHP反序列化', id: 7, category: 'deserialization' },
-  { name: 'Python反序列化', icon: '', description: 'Python pickle反序列化漏洞，尝试构造恶意pickle数据获取服务器上的flag', level: 'high', type: 'Python反序列化', id: 8, category: 'deserialization' },
-  { name: '文件上传', icon: '', description: '文件上传漏洞，尝试上传恶意PHP文件获取服务器上的flag', level: 'medium', type: '文件上传', id: 9, category: 'upload' }
-])
+const vulnerabilities = ref([])
+
+const loadVulnerabilities = async () => {
+  try {
+    const response = await fetch('/api/experiment/vulnerabilities')
+    const data = await response.json()
+    if (data.success) {
+      vulnerabilities.value = data.vulnerabilities.map(vuln => ({
+        id: vuln.id,
+        name: vuln.vulnerability_type,
+        type: vuln.vulnerability_type,
+        description: vuln.description,
+        category: vuln.category,
+        difficulty: vuln.difficulty
+      })).sort((a, b) => {
+        const difficultyOrder = { easy: 0, medium: 1, hard: 2 }
+        return difficultyOrder[a.difficulty] - difficultyOrder[b.difficulty]
+      })
+    }
+  } catch (error) {
+    console.error('Failed to load vulnerabilities:', error)
+  }
+}
 
 const showChallengeModal = ref(false)
 const selectedChallenge = ref(null)
@@ -374,6 +386,10 @@ const stopEnvironment = async () => {
   }
 
   try {
+    if (currentSessionId.value) {
+      await experimentApi.endSession(currentSessionId.value, false)
+    }
+
     await containerApi.remove(
       currentContainer.value.container_id,
       store.state.user?.id || 0,
@@ -421,8 +437,9 @@ const submitFlag = async () => {
   }
 }
 
-onMounted(() => {
-  store.actions.loadExperimentRecords()
+onMounted(async () => {
+  await loadVulnerabilities()
+  await store.actions.loadExperimentRecords()
 })
 </script>
 

@@ -14,8 +14,8 @@ def calculate_total_time(sessions):
     for session in sessions:
         if session.get('start_time') and session.get('end_time'):
             try:
-                start = datetime.fromisoformat(session['start_time'])
-                end = datetime.fromisoformat(session['end_time'])
+                start = datetime.strptime(session['start_time'], '%Y-%m-%d %H:%M')
+                end = datetime.strptime(session['end_time'], '%Y-%m-%d %H:%M')
                 total_seconds += (end - start).total_seconds()
             except:
                 pass

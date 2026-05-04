@@ -1,14 +1,19 @@
 [Unit]
-Description=Mlai Lab Backend Service
+Description=Mlai-Lab Backend Service (Development Mode)
 After=network.target mysql.service docker.service
 
 [Service]
-Type=simple
+Type=notify
 User=root
 WorkingDirectory=/root/Mlai-lab/backend
-ExecStart=/usr/bin/python3 /root/Mlai-lab/backend/app.py
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
+ExecStart=/usr/local/bin/gunicorn --reload -w 2 -b 0.0.0.0:8000 app:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
 Restart=always
-RestartSec=5
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target

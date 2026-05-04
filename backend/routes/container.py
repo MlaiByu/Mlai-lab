@@ -61,22 +61,16 @@ docker_run_configs = {
         'port': 80
     },
     '反射型XSS': {
-        'image': 'nginx:alpine',
-        'port': 80,
-        'volumes': {'./www': '/usr/share/nginx/html'},
-        'env': {}
+        'use_docker_compose': True,
+        'port': 80
     },
     '存储型XSS': {
-        'image': 'nginx:alpine',
-        'port': 80,
-        'volumes': {'./www': '/usr/share/nginx/html'},
-        'env': {}
+        'use_docker_compose': True,
+        'port': 80
     },
     'DOM型XSS': {
-        'image': 'nginx:alpine',
-        'port': 80,
-        'volumes': {'./www': '/usr/share/nginx/html'},
-        'env': {}
+        'use_docker_compose': True,
+        'port': 80
     },
     'PHP反序列化': {
         'image': 'php:7.4-apache',
@@ -137,12 +131,36 @@ def cleanup_expired_containers(user_id=None):
         if host_port and host_port in used_ports:
             used_ports.discard(host_port)
 
-        running_containers.remove(c)
+        if c in running_containers:
+            running_containers.remove(c)
+
+def cleanup_all_containers():
+    containers_to_remove = running_containers.copy()
+
+    for c in containers_to_remove:
+        container_id = c.get('id')
+        if container_id:
+            if c.get('use_docker_compose'):
+                project_name = c.get('project_name')
+                docker_dir = c.get('docker_dir')
+                if project_name and docker_dir:
+                    run_docker_command(
+                        f"cd {docker_dir} && docker compose -p {project_name} down -v"
+                    )
+            else:
+                run_docker_command(f"docker rm -f {container_id}")
+
+        host_port = c.get('host_port')
+        if host_port and host_port in used_ports:
+            used_ports.discard(host_port)
+
+        if c in running_containers:
+            running_containers.remove(c)
 
 @container_bp.route('/api/container/create', methods=['POST'])
 def create_container():
     try:
-        data = request.json
+        data = request.get_json()
         vulnerability_type = data.get('vulnerability_type')
         user_id = data.get('user_id', 0)
         session_id = data.get('session_id', '')
@@ -308,15 +326,18 @@ def remove_container(container_id):
                     host_port = c.get('host_port')
                     if host_port and host_port in used_ports:
                         used_ports.discard(host_port)
-                    running_containers.remove(c)
+                    if c in running_containers:
+                        running_containers.remove(c)
                     break
 
             if user_id and vulnerability_type:
                 try:
-                    from utils.db import update_experiment_record, delete_experiment_session
+                    from utils.db import update_experiment_record, update_experiment_session
+                    import datetime
                     update_experiment_record(user_id, vulnerability_type, is_expired=1)
                     if session_id:
-                        delete_experiment_session(session_id)
+                        now = datetime.datetime.now().isoformat()
+                        update_experiment_session(session_id, end_time=now, success=0)
                 except Exception as e:
                     pass
 
@@ -333,20 +354,20 @@ def remove_container(container_id):
 
 @container_bp.route('/api/container/get_by_vuln', methods=['POST'])
 def get_container_by_vuln():
-    data = request.json
+    data = request.get_json()
     vulnerability_type = data.get('vulnerability_type')
     user_id = data.get('user_id', 0)
-    
+
     if not vulnerability_type:
         return jsonify({'success': False, 'message': '漏洞类型不能为空'}), 400
-    
+
     try:
         for c in running_containers:
             if c['vulnerability_type'] == vulnerability_type and c['status'] == 'running' and c.get('user_id') == user_id:
                 if c.get('timeout_at') and time.time() >= c.get('timeout_at'):
                     cleanup_expired_containers(user_id)
                     return jsonify({'success': False, 'message': '容器已过期'})
-                
+
                 return jsonify({
                     'success': True,
                     'container_id': c['id'],
@@ -356,7 +377,15 @@ def get_container_by_vuln():
                     'timeout_at': c.get('timeout_at'),
                     'status': c['status']
                 })
-        
+
         return jsonify({'success': False, 'message': '没有运行中的容器'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@container_bp.route('/api/container/cleanup_all', methods=['POST'])
+def cleanup_all_containers_route():
+    try:
+        cleanup_all_containers()
+        return jsonify({'success': True, 'message': '所有容器已清理'})
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500

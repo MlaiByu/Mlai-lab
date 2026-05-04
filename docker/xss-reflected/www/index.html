@@ -75,18 +75,12 @@
     <div class="container">
         <h1>反射型 XSS 实验</h1>
         <form method="GET">
-            输入搜索内容：<input type="text" name="xss" placeholder="尝试输入 JavaScript 代码">
+            输入搜索内容：<input type="text" name="xss" id="input" placeholder="尝试输入 JavaScript 代码">
             <button type="submit">搜索</button>
         </form>
         <hr>
-        <div class="result">
-            <?php
-            if(isset($_GET['xss'])){
-                echo "你输入的内容：".$_GET['xss'];
-            } else {
-                echo "在此显示搜索结果...";
-            }
-            ?>
+        <div class="result" id="result">
+            在此显示搜索结果...
         </div>
 
         <div class="hint">
@@ -103,7 +97,17 @@
     <script>
         window.flag = "Mlai{xss_reflected_flag}";
         console.log("Flag:", window.flag);
-        document.getElementById('flag-hint').innerHTML = window.flag;
+
+        function getUrlParam(name) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(name);
+        }
+
+        const xssParam = getUrlParam('xss');
+        if (xssParam) {
+            document.getElementById('result').innerHTML = "你输入的内容：" + xssParam;
+            document.getElementById('input').value = xssParam;
+        }
     </script>
 </body>
 </html>

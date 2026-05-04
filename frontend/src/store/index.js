@@ -141,7 +141,7 @@ const actions = {
         throw new Error('启动实验失败')
       }
       
-      const containerResponse = await containerApi.create(vulnerabilityType)
+      const containerResponse = await containerApi.create(vulnerabilityType, state.user.id, experimentResponse.sessionId)
       if (!containerResponse.success) {
         throw new Error(containerResponse.message || '创建容器失败')
       }
