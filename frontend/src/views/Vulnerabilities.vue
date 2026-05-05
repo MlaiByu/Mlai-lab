@@ -48,7 +48,7 @@
 
           <div class="solution-section">
             <button class="btn-toggle-solution" @click="toggleSolution">
-              {{ showSolution ? '隐藏解题思路' : '📖 显示解题思路' }}
+              {{ showSolution ? '隐藏解题思路' : '显示解题思路' }}
             </button>
             <div v-if="showSolution" class="solution-content">
               <h3>解题思路</h3>
@@ -71,7 +71,7 @@
               <div class="status-indicator">
                 <span class="status-dot running"></span>
                 <span>靶场环境运行中</span>
-                <span class="countdown">⏱️ {{ remainingTime }}</span>
+                <span class="countdown">{{ remainingTime }}</span>
               </div>
               <div class="env-details">
                 <p>容器ID: {{ currentContainer.container_id?.slice(0, 12) }}...</p>
@@ -105,22 +105,32 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import store from '../store'
 import { experiment as experimentApi, container as containerApi } from '../api'
 
-const router = useRouter()
-
 const categories = ref([
-  { id: 'sqli', name: 'SQL注入', icon: '' },
-  { id: 'xss', name: 'XSS攻击', icon: '' },
-  { id: 'csrf', name: 'CSRF攻击', icon: '' },
-  { id: 'deserialization', name: '反序列化', icon: '' },
-  { id: 'upload', name: '文件上传', icon: '' }
+  { id: 'sqli', name: 'SQL注入' },
+  { id: 'xss', name: 'XSS攻击' },
+  { id: 'csrf', name: 'CSRF攻击' },
+  { id: 'deserialization', name: '反序列化' },
+  { id: 'upload', name: '文件上传' }
 ])
 
 const vulnerabilities = ref([])
+const showChallengeModal = ref(false)
+const selectedChallenge = ref(null)
+const flagInput = ref('')
+const flagResult = ref(null)
+const isSubmitting = ref(false)
+const isStarting = ref(false)
+const currentContainer = ref(null)
+const selectedCategory = ref('sqli')
+const remainingTime = ref('01:00:00')
+const showSolution = ref(false)
+const currentSolution = ref('')
+const currentSessionId = ref('')
+let countdownTimer = null
 
 const loadVulnerabilities = async () => {
   try {
@@ -144,43 +154,6 @@ const loadVulnerabilities = async () => {
   }
 }
 
-const showChallengeModal = ref(false)
-const selectedChallenge = ref(null)
-const flagInput = ref('')
-const flagResult = ref(null)
-const isSubmitting = ref(false)
-const isStarting = ref(false)
-const currentContainer = ref(null)
-const selectedCategory = ref('sqli')
-const remainingTime = ref('01:00:00')
-const showSolution = ref(false)
-const currentSolution = ref('')
-const currentSessionId = ref('')
-let countdownTimer = null
-
-const toggleSolution = async () => {
-  showSolution.value = !showSolution.value
-  if (showSolution.value && !currentSolution.value && selectedChallenge.value) {
-    await loadSolution(selectedChallenge.value.type)
-  }
-}
-
-const loadSolution = async (vulnType) => {
-  try {
-    const response = await fetch(`/api/experiment/solution?type=${encodeURIComponent(vulnType)}`)
-    const data = await response.json()
-    if (data.success) {
-      currentSolution.value = data.solution || '暂无解题思路'
-    }
-  } catch (error) {
-    currentSolution.value = '加载解题思路失败'
-  }
-}
-
-const selectCategory = (categoryId) => {
-  selectedCategory.value = categoryId
-}
-
 const currentCategoryName = computed(() => {
   const category = categories.value.find(c => c.id === selectedCategory.value)
   return category ? category.name : ''
@@ -190,60 +163,45 @@ const filteredVulnerabilities = computed(() => {
   return vulnerabilities.value.filter(v => v.category === selectedCategory.value)
 })
 
+const selectCategory = (categoryId) => {
+  selectedCategory.value = categoryId
+}
+
 const getStatus = (type) => {
   const userId = store.state.user?.id
-  if (!userId) {
-    return 'pending'
-  }
+  if (!userId) return 'pending'
 
-  const record = store.state.experimentRecords.find(
-    r => r.vulnerability_type === type
-  )
-
-  if (!record) {
-    return 'pending'
-  }
-
-  if (record.success_count > 0) {
-    return 'completed'
-  }
+  const record = store.state.experimentRecords.find(r => r.vulnerability_type === type)
+  if (!record) return 'pending'
+  if (record.success_count > 0) return 'completed'
 
   if (record.start_time) {
     try {
       const elapsed = (Date.now() - new Date(record.start_time).getTime()) / 1000
       const isTimeExpired = elapsed >= 3600
       const isMarkedExpired = record.is_expired === 1 || record.is_expired === true
-
-      if (elapsed < 3600 && !isMarkedExpired) {
-        return 'in_progress'
-      }
+      if (elapsed < 3600 && !isMarkedExpired) return 'in_progress'
     } catch (e) {
       console.error('解析时间失败:', e)
     }
   }
-
   return 'pending'
 }
 
 const getStatusText = (type) => {
   const status = getStatus(type)
   switch (status) {
-    case 'completed':
-      return '已完成'
-    case 'in_progress':
-      return '进行中'
-    default:
-      return '未完成'
+    case 'completed': return '已完成'
+    case 'in_progress': return '进行中'
+    default: return '未完成'
   }
 }
 
 const getTargetUrl = () => {
   if (!currentContainer.value?.host_port) return ''
-
   const port = currentContainer.value.host_port
   const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
   const host = window.location.hostname
-
   return `${protocol}//${host}:${port}`
 }
 
@@ -258,14 +216,13 @@ const openChallengeModal = async (vuln) => {
     const response = await containerApi.getByVuln(vuln.type, store.state.user?.id || 0)
     if (response.success) {
       currentContainer.value = response
-
       if (response.timeout_at) {
         const remaining = Math.max(0, Math.floor(response.timeout_at - Date.now() / 1000))
         if (remaining > 0) {
           startCountdownWithRemaining(remaining)
         } else {
           await stopEnvironment()
-          flagResult.value = { success: false, message: '⚠️ 时间已到，靶场环境已自动销毁' }
+          flagResult.value = { success: false, message: '时间已到，靶场环境已自动销毁' }
         }
       } else {
         startCountdown()
@@ -284,24 +241,65 @@ const closeChallengeModal = () => {
   currentContainer.value = null
   showSolution.value = false
   currentSolution.value = ''
+  clearCountdown()
+}
 
+const clearCountdown = () => {
   if (countdownTimer) {
     clearInterval(countdownTimer)
     countdownTimer = null
   }
 }
 
+const startCountdown = () => {
+  const startTime = Date.now()
+  const totalSeconds = 3600
+  remainingTime.value = '01:00:00'
+  clearCountdown()
+  countdownTimer = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000)
+    const remaining = Math.max(0, totalSeconds - elapsed)
+    remainingTime.value = formatTime(remaining)
+    if (remaining <= 0) {
+      clearCountdown()
+      stopEnvironment()
+      flagResult.value = { success: false, message: '时间已到，靶场环境已自动销毁' }
+    }
+  }, 1000)
+}
+
+const startCountdownWithRemaining = (remainingSeconds) => {
+  const startTime = Date.now()
+  const totalSeconds = remainingSeconds
+  remainingTime.value = formatTime(totalSeconds)
+  clearCountdown()
+  countdownTimer = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - startTime) / 1000)
+    const remaining = Math.max(0, totalSeconds - elapsed)
+    remainingTime.value = formatTime(remaining)
+    if (remaining <= 0) {
+      clearCountdown()
+      stopEnvironment()
+      flagResult.value = { success: false, message: '时间已到，靶场环境已自动销毁' }
+    }
+  }, 1000)
+}
+
+const formatTime = (seconds) => {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+}
+
 const startEnvironment = async () => {
   if (!selectedChallenge.value) return
-
   isStarting.value = true
-
   try {
     const experimentResponse = await experimentApi.start(store.state.user?.id || 0, selectedChallenge.value.type)
     if (experimentResponse.sessionId) {
       currentSessionId.value = experimentResponse.sessionId
     }
-
     const response = await containerApi.create(selectedChallenge.value.type, store.state.user?.id || 0, currentSessionId.value)
     if (response.success) {
       currentContainer.value = response
@@ -317,91 +315,21 @@ const startEnvironment = async () => {
   }
 }
 
-const startCountdown = () => {
-  const startTime = Date.now()
-  const totalSeconds = 3600
-
-  remainingTime.value = '01:00:00'
-
-  if (countdownTimer) {
-    clearInterval(countdownTimer)
-  }
-
-  countdownTimer = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - startTime) / 1000)
-    const remaining = Math.max(0, totalSeconds - elapsed)
-
-    const hours = Math.floor(remaining / 3600)
-    const minutes = Math.floor((remaining % 3600) / 60)
-    const secs = remaining % 60
-
-    remainingTime.value = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-
-    if (remaining <= 0) {
-      clearInterval(countdownTimer)
-      countdownTimer = null
-      stopEnvironment()
-      flagResult.value = { success: false, message: '⚠️ 时间已到，靶场环境已自动销毁' }
-    }
-  }, 1000)
-}
-
-const startCountdownWithRemaining = (remainingSeconds) => {
-  const startTime = Date.now()
-  const totalSeconds = remainingSeconds
-
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const secs = totalSeconds % 60
-  remainingTime.value = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-
-  if (countdownTimer) {
-    clearInterval(countdownTimer)
-  }
-
-  countdownTimer = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - startTime) / 1000)
-    const remaining = Math.max(0, totalSeconds - elapsed)
-
-    const hours = Math.floor(remaining / 3600)
-    const minutes = Math.floor((remaining % 3600) / 60)
-    const secs = remaining % 60
-
-    remainingTime.value = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-
-    if (remaining <= 0) {
-      clearInterval(countdownTimer)
-      countdownTimer = null
-      stopEnvironment()
-      flagResult.value = { success: false, message: '⚠️ 时间已到，靶场环境已自动销毁' }
-    }
-  }, 1000)
-}
-
 const stopEnvironment = async () => {
   if (!currentContainer.value) return
-
-  if (countdownTimer) {
-    clearInterval(countdownTimer)
-    countdownTimer = null
-  }
-
+  clearCountdown()
   try {
     if (currentSessionId.value) {
       await experimentApi.endSession(currentSessionId.value, false)
     }
-
     await containerApi.remove(
       currentContainer.value.container_id,
       store.state.user?.id || 0,
       selectedChallenge.value?.type || '',
       currentSessionId.value || ''
     )
-
     currentSessionId.value = ''
-
     currentContainer.value = null
-
     await store.actions.loadExperimentRecords()
   } catch (error) {
     console.error('停止容器失败:', error)
@@ -413,9 +341,7 @@ const submitFlag = async () => {
     flagResult.value = { success: false, message: '请输入Flag' }
     return
   }
-
   isSubmitting.value = true
-
   try {
     const response = await experimentApi.submit({
       user_id: store.state.user?.id || 0,
@@ -423,7 +349,6 @@ const submitFlag = async () => {
       flag: flagInput.value,
       session_id: currentSessionId.value
     })
-
     if (response.success) {
       flagResult.value = { success: true, message: 'Flag正确！挑战成功！' }
       await store.actions.loadExperimentRecords()
@@ -438,9 +363,28 @@ const submitFlag = async () => {
   }
 }
 
+const toggleSolution = async () => {
+  showSolution.value = !showSolution.value
+  if (showSolution.value && !currentSolution.value && selectedChallenge.value) {
+    try {
+      const response = await fetch(`/api/experiment/solution?type=${encodeURIComponent(selectedChallenge.value.type)}`)
+      const data = await response.json()
+      if (data.success) {
+        currentSolution.value = data.solution || '暂无解题思路'
+      }
+    } catch (error) {
+      currentSolution.value = '加载解题思路失败'
+    }
+  }
+}
+
 onMounted(async () => {
   await loadVulnerabilities()
   await store.actions.loadExperimentRecords()
+})
+
+onUnmounted(() => {
+  clearCountdown()
 })
 </script>
 
@@ -476,7 +420,6 @@ onMounted(async () => {
 .category-item {
   display: flex;
   align-items: center;
-  gap: 10px;
   padding: 12px 15px;
   margin-bottom: 8px;
   border-radius: 8px;
@@ -493,10 +436,6 @@ onMounted(async () => {
 .category-item.active {
   background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
   color: #fff;
-}
-
-.category-icon {
-  font-size: 1.2rem;
 }
 
 .main-content {
@@ -570,6 +509,7 @@ onMounted(async () => {
   font-size: 1rem;
   font-weight: 600;
   margin-bottom: 8px;
+  display: block;
 }
 
 .challenge-status {
@@ -579,10 +519,6 @@ onMounted(async () => {
   font-size: 0.75rem;
   font-weight: 500;
   margin-top: 8px;
-}
-
-.challenge-icon {
-  font-size: 1.5rem;
 }
 
 .challenge-modal-overlay {
@@ -636,21 +572,10 @@ onMounted(async () => {
   padding: 25px;
 }
 
-.challenge-content {
-  text-align: center;
-}
-
 .challenge-title {
   color: #fff;
   font-size: 1.8rem;
   margin-bottom: 10px;
-}
-
-.challenge-points {
-  color: #ffc107;
-  font-size: 2rem;
-  font-weight: bold;
-  margin-bottom: 20px;
 }
 
 .challenge-description {
@@ -766,7 +691,7 @@ onMounted(async () => {
   box-shadow: 0 0 10px #28a745;
 }
 
-.status-indicator span:last-child {
+.status-indicator span:nth-child(2) {
   color: #28a745;
   font-weight: 600;
 }

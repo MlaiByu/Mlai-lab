@@ -106,6 +106,7 @@
           </el-table>
         </div>
         <div class="modal-footer">
+          <el-button type="success" icon="Download" @click="exportProgress">导出成绩</el-button>
           <el-button @click="closeProgressModal">关闭</el-button>
         </div>
       </div>
@@ -262,6 +263,70 @@ const closeProgressModal = () => {
   selectedUser.value = null
   selectedUserStats.value = null
   selectedUserExperiments.value = []
+}
+
+const getAuthToken = () => {
+  const user = localStorage.getItem('user')
+  if (user) {
+    try {
+      return JSON.parse(user).token
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+const exportProgress = async () => {
+  if (!selectedUser.value) {
+    console.error('导出失败: 未选择用户')
+    return
+  }
+  
+  const userId = selectedUser.value.id
+  if (!userId) {
+    console.error('导出失败: 用户ID不存在', selectedUser.value)
+    return
+  }
+  
+  try {
+    const token = getAuthToken()
+    console.log('开始导出, userId:', userId, 'token:', token ? '存在' : '不存在')
+    const response = await fetch(`/api/stats/export_scores?userId=${userId}`, {
+      method: 'GET',
+      headers: {
+        ...(token && { 'Authorization': `Bearer ${token}` })
+      }
+    })
+    
+    console.log('导出响应状态:', response.status)
+    
+    if (response.ok) {
+      const blob = await response.blob()
+      const contentDisposition = response.headers.get('Content-Disposition')
+      let filename = `${selectedUser.value.username}_progress.csv`
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename=(.+)/)
+        if (match) {
+          filename = match[1]
+        }
+      }
+      
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } else {
+      const errorText = await response.text()
+      console.error('导出失败, 状态:', response.status, '响应:', errorText)
+    }
+  } catch (error) {
+    console.error('导出失败:', error)
+  }
 }
 
 const addUser = () => {

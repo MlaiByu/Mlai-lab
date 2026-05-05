@@ -10,13 +10,16 @@
         <router-link to="/home" :class="['nav-link', { active: route.path === '/home' }]">
           首页
         </router-link>
+        <router-link to="/learning" :class="['nav-link', { active: route.path === '/learning' }]">
+          漏洞学习
+        </router-link>
         <router-link to="/vulnerabilities" :class="['nav-link', { active: route.path === '/vulnerabilities' }]">
           漏洞列表
         </router-link>
         <router-link to="/progress" :class="['nav-link', { active: route.path === '/progress' }]">
           学习进度
         </router-link>
-        <router-link v-if="isTeacher" to="/users" :class="['nav-link', { active: route.path === '/users' }]">
+        <router-link v-if="isTeacherOrAdmin" to="/users" :class="['nav-link', { active: route.path === '/users' }]">
           用户管理
         </router-link>
       </nav>
@@ -161,8 +164,11 @@ const passwordForm = reactive({
   confirmPassword: ''
 })
 
-const isLoggedIn = computed(() => store.getters.isLoggedIn())
-const isTeacher = computed(() => store.getters.isTeacher())
+const isLoggedIn = computed(() => !!store.state.user)
+const isTeacherOrAdmin = computed(() => {
+  const role = store.state.user?.role
+  return role === 'teacher' || role === 'admin'
+})
 const userName = computed(() => store.state.user?.username || '')
 const userId = computed(() => store.state.user?.id || null)
 

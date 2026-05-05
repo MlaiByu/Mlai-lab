@@ -1,6 +1,6 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, g
 from utils.db import get_all_users, get_experiment_records, create_user, get_user_by_username, get_db_connection, hash_password, get_user_by_id, get_experiment_sessions
-from datetime import datetime
+from utils.auth import admin_required, teacher_or_admin_required
 
 users_bp = Blueprint('users', __name__)
 
@@ -9,35 +9,20 @@ def get_record_status(record):
         return 'not_started'
     return 'completed' if record['success_count'] > 0 else 'in_progress'
 
-def calculate_total_time(sessions):
-    total_seconds = 0.0
-    for session in sessions:
-        if session.get('start_time') and session.get('end_time'):
-            try:
-                start = datetime.strptime(session['start_time'], '%Y-%m-%d %H:%M')
-                end = datetime.strptime(session['end_time'], '%Y-%m-%d %H:%M')
-                total_seconds += (end - start).total_seconds()
-            except:
-                pass
-    return round(total_seconds, 2)
-
 @users_bp.route('/api/users/list', methods=['GET'])
+@teacher_or_admin_required
 def get_users():
     users = get_all_users()
     result = []
     for user in users:
         records = get_experiment_records(user['id'])
-        sessions = get_experiment_sessions(user['id'])
 
         exp_list = []
         for r in records:
-            vuln_sessions = [s for s in sessions if s['vulnerability_type'] == r['vulnerability_type']]
             exp_list.append({
                 'vulnerability_type': r['vulnerability_type'],
                 'attempt_count': r['attempt_count'],
                 'success_count': r['success_count'],
-                'last_attempt': r['last_attempt'],
-                'total_time': calculate_total_time(vuln_sessions),
                 'status': get_record_status(r)
             })
 
@@ -54,6 +39,7 @@ def get_users():
     return jsonify({"success": True, "data": result})
 
 @users_bp.route('/api/users/create', methods=['POST'])
+@teacher_or_admin_required
 def create_user_api():
     data = request.get_json()
     username = data.get('username', '')
@@ -70,6 +56,7 @@ def create_user_api():
     return jsonify({"success": True, "message": "用户创建成功"})
 
 @users_bp.route('/api/users/<int:user_id>', methods=['DELETE'])
+@teacher_or_admin_required
 def delete_user(user_id):
     try:
         conn = get_db_connection()
@@ -84,6 +71,7 @@ def delete_user(user_id):
         return jsonify({"success": False, "message": str(e)})
 
 @users_bp.route('/api/users/profile/<int:user_id>', methods=['GET'])
+@teacher_or_admin_required
 def get_user_profile(user_id):
     try:
         user = get_user_by_id(user_id)
@@ -96,22 +84,16 @@ def get_user_profile(user_id):
         exp_details = []
         for record in records:
             vuln_sessions = [s for s in sessions if s['vulnerability_type'] == record['vulnerability_type']]
-            total_time = calculate_total_time(vuln_sessions)
-
             exp_details.append({
                 'vulnerability_type': record['vulnerability_type'],
                 'attempt_count': record['attempt_count'],
                 'success_count': record['success_count'],
-                'first_success': record['first_success'],
-                'last_attempt': record['last_attempt'],
-                'total_time': total_time,
                 'status': get_record_status(record),
                 'session_count': len(vuln_sessions)
             })
 
         total_attempts = sum(r['attempt_count'] for r in records)
         total_success = sum(r['success_count'] for r in records)
-        total_time_all = sum(float(r['total_time']) if r['total_time'] else 0 for r in exp_details)
 
         return jsonify({
             "success": True,
@@ -123,13 +105,14 @@ def get_user_profile(user_id):
                 "statistics": {
                     "total_attempts": total_attempts,
                     "total_success": total_success,
-                    "total_time": round(total_time_all, 2),
                     "completion_rate": round(total_success / len(records) * 100, 1) if records else 0
                 },
                 "experiments": exp_details,
                 "recent_sessions": [{
                     'session_id': s['session_id'],
                     'vulnerability_type': s['vulnerability_type'],
+                    'container_id': s.get('container_id'),
+                    'port': s.get('port'),
                     'start_time': s['start_time'],
                     'end_time': s['end_time'],
                     'success': s['success'] == 1
@@ -141,6 +124,10 @@ def get_user_profile(user_id):
 
 @users_bp.route('/api/users/change_password/<int:user_id>', methods=['POST'])
 def change_password(user_id):
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({"success": False, "message": "请先登录"}), 401
+
     data = request.get_json()
     old_password = data.get('old_password', '')
     new_password = data.get('new_password', '')
@@ -166,5 +153,37 @@ def change_password(user_id):
         conn.commit()
         conn.close()
         return jsonify({"success": True, "message": "密码修改成功"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+@users_bp.route('/api/users/promote_to_teacher', methods=['POST'])
+@teacher_or_admin_required
+def promote_to_teacher():
+    data = request.get_json()
+    target_user_id = data.get('target_user_id', data.get('targetUserId', 0))
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM users WHERE id = %s", (target_user_id,))
+        target_user = cursor.fetchone()
+        if not target_user:
+            conn.close()
+            return jsonify({"success": False, "message": "目标用户不存在"})
+
+        if target_user['role'] == 'admin':
+            conn.close()
+            return jsonify({"success": False, "message": "管理员角色不能被修改"})
+
+        if target_user['role'] == 'teacher':
+            conn.close()
+            return jsonify({"success": False, "message": "该用户已是教师角色"})
+
+        cursor.execute("UPDATE users SET role = 'teacher' WHERE id = %s", (target_user_id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({"success": True, "message": f"用户 {target_user['username']} 已提升为教师"})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})

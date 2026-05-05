@@ -30,7 +30,6 @@ def register():
     data = request.get_json()
     username = data.get('username', '')
     password = data.get('password', '')
-    role = data.get('role', 'student')
     
     if not username or not password:
         return jsonify({"success": False, "message": "用户名和密码不能为空"})
@@ -38,9 +37,9 @@ def register():
     if get_user_by_username(username):
         return jsonify({"success": False, "message": "用户名已存在"})
     
-    create_user(username, password, role)
+    create_user(username, password, 'student')
     
-    return jsonify({"success": True, "message": "注册成功"})
+    return jsonify({"success": True, "message": "注册成功，默认角色为学生"})
 
 @auth_bp.route('/api/auth/login', methods=['POST'])
 def login():

@@ -39,14 +39,10 @@ services:
       nofile:
         soft: 1024
         hard: 1024
-    read_only: true
-    security_opt:
-      - no-new-privileges:true
     tmpfs:
       - /tmp:rw,size=64m,uid=33,gid=33
       - /var/run/apache2:rw,size=64m,uid=33,gid=33
       - /var/log/apache2:rw,size=32m,uid=33,gid=33
-      - /usr/src/php:rw,size=128m
     ports:
       - "${HOST_PORT}:80"
     volumes:

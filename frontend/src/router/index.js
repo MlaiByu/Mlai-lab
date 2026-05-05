@@ -5,6 +5,7 @@ import Home from '../views/Home.vue'
 import Vulnerabilities from '../views/Vulnerabilities.vue'
 import Users from '../views/Users.vue'
 import Progress from '../views/Progress.vue'
+import Learning from '../views/Learning.vue'
 
 const routes = [
   {
@@ -32,6 +33,12 @@ const routes = [
     path: '/vulnerabilities',
     name: 'Vulnerabilities',
     component: Vulnerabilities,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/learning',
+    name: 'Learning',
+    component: Learning,
     meta: { requiresAuth: true }
   },
   {

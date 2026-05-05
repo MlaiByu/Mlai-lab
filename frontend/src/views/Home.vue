@@ -3,7 +3,6 @@
     <div class="hero-section">
       <div class="hero-bg"></div>
       <div class="hero-content">
-        <div class="hero-icon">🛡️</div>
         <h1>欢迎来到 Mlai-Lab</h1>
         <p class="hero-subtitle">现代化 Web 安全漏洞测试平台</p>
         <p class="hero-description">
@@ -15,28 +14,28 @@
     <div class="stats-section">
       <div class="stats-container">
         <div class="stat-card">
-          <div class="stat-icon total">📊</div>
+          <div class="stat-icon total"></div>
           <div class="stat-content">
             <div class="stat-value">{{ totalExperiments }}</div>
             <div class="stat-label">总漏洞数</div>
           </div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon completed">✅</div>
+          <div class="stat-icon completed"></div>
           <div class="stat-content">
             <div class="stat-value">{{ completedExperiments }}</div>
             <div class="stat-label">已完成</div>
           </div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon in-progress">⏳</div>
+          <div class="stat-icon in-progress"></div>
           <div class="stat-content">
             <div class="stat-value">{{ inProgressExperiments }}</div>
             <div class="stat-label">进行中</div>
           </div>
         </div>
         <div class="stat-card">
-          <div class="stat-icon pending">📝</div>
+          <div class="stat-icon pending"></div>
           <div class="stat-content">
             <div class="stat-value">{{ pendingExperiments }}</div>
             <div class="stat-label">未完成</div>
@@ -48,54 +47,41 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import store from '../store'
+import { vulnerabilities } from '../data/vulnerabilities'
 
-const vulnerabilityTypes = [
-  { name: 'SQL注入-入门', type: 'SQL注入-入门' },
-  { name: 'SQL注入-中级', type: 'SQL注入-中级' },
-  { name: 'SQL注入-高级', type: 'SQL注入-高级' },
-  { name: '反射型XSS', type: '反射型XSS' },
-  { name: '存储型XSS', type: '存储型XSS' },
-  { name: 'DOM型XSS', type: 'DOM型XSS' },
-  { name: 'PHP反序列化', type: 'PHP反序列化' },
-  { name: 'Python反序列化', type: 'Python反序列化' },
-  { name: '文件上传', type: '文件上传' }
-]
-
-const totalExperiments = computed(() => vulnerabilityTypes.length)
+const totalExperiments = computed(() => vulnerabilities.length)
 
 const getVulnStatus = (type) => {
   if (!store.state.user) return 'pending'
-  
+
   const record = store.state.experimentRecords.find(r => r.vulnerability_type === type)
   if (!record) return 'pending'
-  
   if (record.success_count > 0) return 'completed'
-  
   if (record.is_expired) return 'pending'
-  
+
   if (record.start_time) {
     try {
       const elapsed = (Date.now() - new Date(record.start_time).getTime()) / 1000
       if (elapsed < 3600) return 'in_progress'
     } catch {}
   }
-  
+
   return 'pending'
 }
 
-const completedExperiments = computed(() => {
-  return vulnerabilityTypes.filter(v => getVulnStatus(v.type) === 'completed').length
-})
+const completedExperiments = computed(() =>
+  vulnerabilities.filter(v => getVulnStatus(v.name) === 'completed').length
+)
 
-const inProgressExperiments = computed(() => {
-  return vulnerabilityTypes.filter(v => getVulnStatus(v.type) === 'in_progress').length
-})
+const inProgressExperiments = computed(() =>
+  vulnerabilities.filter(v => getVulnStatus(v.name) === 'in_progress').length
+)
 
-const pendingExperiments = computed(() => {
-  return vulnerabilityTypes.filter(v => getVulnStatus(v.type) === 'pending').length
-})
+const pendingExperiments = computed(() =>
+  vulnerabilities.filter(v => getVulnStatus(v.name) === 'pending').length
+)
 
 onMounted(() => {
   store.actions.loadExperimentRecords()
@@ -131,17 +117,6 @@ onMounted(() => {
   z-index: 1;
   max-width: 800px;
   margin: 0 auto;
-}
-
-.hero-icon {
-  font-size: 5rem;
-  margin-bottom: 1.5rem;
-  animation: bounce 2s ease-in-out infinite;
-}
-
-@keyframes bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-15px); }
 }
 
 .hero-content h1 {
@@ -201,7 +176,6 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
 }
 
 .stat-icon.total {
@@ -241,12 +215,12 @@ onMounted(() => {
   .stats-section {
     padding: 2rem 1rem;
   }
-  
+
   .stats-container {
     grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
   }
-  
+
   .stat-value {
     font-size: 1.5rem;
   }

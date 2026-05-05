@@ -97,7 +97,7 @@ const handleLogin = async () => {
         id: data.user.id,
         username: data.user.username,
         role: data.user.role,
-        token: `token_${data.user.id}`
+        token: data.user.token
       }
       localStorage.setItem('user', JSON.stringify(user))
       store.mutations.setUser(user)

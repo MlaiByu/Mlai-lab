@@ -41,13 +41,6 @@
           />
         </el-form-item>
         
-        <el-form-item label="角色" label-width="80px">
-          <el-select v-model="registerForm.role" size="large" placeholder="请选择角色">
-            <el-option label="学生" value="student" />
-            <el-option label="教师" value="teacher" />
-          </el-select>
-        </el-form-item>
-        
         <el-form-item>
           <el-button 
             type="primary" 
@@ -86,8 +79,7 @@ const router = useRouter()
 const registerForm = reactive({
   username: '',
   password: '',
-  confirmPassword: '',
-  role: 'student'
+  confirmPassword: ''
 })
 
 const loading = ref(false)
@@ -112,8 +104,7 @@ const handleRegister = async () => {
       },
       body: JSON.stringify({
         username: registerForm.username,
-        password: registerForm.password,
-        role: registerForm.role
+        password: registerForm.password
       })
     })
     const data = await response.json()
@@ -233,10 +224,5 @@ const goToLogin = () => {
 
 :deep(.el-input__wrapper.is-focus) {
   box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
-}
-
-:deep(.el-select__wrapper) {
-  border-radius: 14px;
-  background: #f8fafc;
 }
 </style>

@@ -49,14 +49,12 @@ def _scan_used_ports():
     except:
         pass
 
-    with lock:
-        ports.update(used_ports)
-
     return ports
 
 def get_available_port():
     with lock:
         all_used = get_cached_ports()
+        all_used.update(used_ports)
         for port in range(Config.PORT_MIN, Config.PORT_MAX + 1):
             if port not in all_used and port not in used_ports:
                 used_ports.add(port)
@@ -84,7 +82,7 @@ def docker_compose_up(docker_dir, project_name, host_port):
 
     success, stdout, stderr = run_docker_command(
         f"cd {docker_dir} && HOST_PORT={host_port} docker compose -p {project_name} up -d",
-        timeout=60
+        timeout=120
     )
     return success, stdout, stderr
 
@@ -155,7 +153,10 @@ def _async_remove(container_info):
 @container_bp.route('/api/container/create', methods=['POST'])
 def create_container():
     try:
+        print(f"[DEBUG] create_container called at {datetime.datetime.now()}")
         data = request.get_json()
+        print(f"[DEBUG] Data received: {data}")
+        
         vulnerability_type = data.get('vulnerability_type')
         user_id = data.get('user_id', 0)
         session_id = data.get('session_id', '')
@@ -163,20 +164,27 @@ def create_container():
         if not vulnerability_type or not isinstance(vulnerability_type, str):
             return jsonify({'success': False, 'message': '漏洞类型无效'}), 400
 
+        print(f"[DEBUG] Calling cleanup_expired_containers for user {user_id}")
         cleanup_expired_containers(user_id)
+        print(f"[DEBUG] cleanup_expired_containers completed")
 
         type_tag = tag_map.get(vulnerability_type, vulnerability_type.lower().replace(' ', '-'))
         project_name = f"mlai-{type_tag[:8]}-{uuid.uuid4().hex[:6]}"
         docker_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'docker', type_tag))
+        print(f"[DEBUG] type_tag={type_tag}, docker_dir={docker_dir}")
 
         if not os.path.exists(docker_dir):
             return jsonify({'success': False, 'message': '漏洞环境不存在'}), 404
 
+        print(f"[DEBUG] Calling get_available_port")
         host_port = get_available_port()
+        print(f"[DEBUG] Got port: {host_port}")
+        
         if not host_port:
             return jsonify({'success': False, 'message': '没有可用端口'}), 500
 
         config = docker_run_configs.get(vulnerability_type, {})
+        print(f"[DEBUG] Config: {config}")
         use_compose = config.get('use_docker_compose', False)
 
         if use_compose:

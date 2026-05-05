@@ -66,8 +66,7 @@ def get_experiment_records(user_id):
     with db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT vulnerability_type, attempt_count, success_count, last_attempt, first_success,
-                   total_time, start_time, end_time, is_expired, remaining_time
+            SELECT vulnerability_type, attempt_count, success_count
             FROM experiment_records
             WHERE user_id = %s
             ORDER BY vulnerability_type
@@ -106,14 +105,20 @@ def get_experiment_record(user_id, vulnerability_type):
         result = cursor.fetchone()
         return result if result else None
 
-def create_experiment_session(user_id, vulnerability_type, session_id):
+def create_experiment_session(user_id, vulnerability_type, session_id, container_id=None, port=None):
     with db_connection() as conn:
         cursor = conn.cursor()
         now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
-        cursor.execute('''
-            INSERT INTO experiment_sessions (user_id, vulnerability_type, session_id, start_time)
-            VALUES (%s, %s, %s, %s)
-        ''', (user_id, vulnerability_type, session_id, now))
+        if container_id and port:
+            cursor.execute('''
+                INSERT INTO experiment_sessions (user_id, vulnerability_type, session_id, start_time, container_id, port)
+                VALUES (%s, %s, %s, %s, %s, %s)
+            ''', (user_id, vulnerability_type, session_id, now, container_id, port))
+        else:
+            cursor.execute('''
+                INSERT INTO experiment_sessions (user_id, vulnerability_type, session_id, start_time)
+                VALUES (%s, %s, %s, %s)
+            ''', (user_id, vulnerability_type, session_id, now))
         conn.commit()
 
 def update_experiment_session(session_id, **kwargs):
