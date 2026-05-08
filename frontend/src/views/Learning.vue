@@ -42,120 +42,111 @@
       </main>
     </div>
 
-    <div v-if="showDetailModal" class="detail-modal-overlay" @click.self="closeDetailModal">
+    <div v-if="showDetailModal" class="modal-overlay" @click.self="closeDetailModal">
       <div class="detail-modal">
         <div class="modal-header">
-          <div class="header-left">
-            <div>
-              <h2>{{ selectedVuln?.name }}</h2>
-              <span :class="['difficulty-badge', getDifficultyClass(selectedVuln?.difficulty)]">
-                {{ getDifficultyLabel(selectedVuln?.difficulty) }}
-              </span>
+          <div class="header-info">
+            <h2>{{ selectedVuln?.name }}</h2>
+            <span :class="['difficulty-badge', getDifficultyClass(selectedVuln?.difficulty)]">
+              {{ getDifficultyLabel(selectedVuln?.difficulty) }}
+            </span>
+          </div>
+          <button class="close-btn" @click="closeDetailModal">×</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="modal-section">
+            <h3>漏洞简介</h3>
+            <p>{{ currentVulnType?.description }}</p>
+          </div>
+
+          <div class="modal-section">
+            <h3>漏洞原理</h3>
+            <ul class="principle-list">
+              <li v-for="(item, index) in currentVulnType?.principles" :key="index">
+                <span class="step-number">{{ index + 1 }}</span>
+                <span>{{ item }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="modal-section">
+            <h3>危害影响</h3>
+            <div class="impact-list">
+              <div v-for="(impact, index) in currentVulnType?.impacts" :key="index" class="impact-item">
+                {{ impact }}
+              </div>
             </div>
           </div>
-          <button class="modal-close-btn" @click="closeDetailModal">×</button>
-        </div>
 
-        <div class="view-toggle">
-          <button
-            :class="['toggle-btn', { active: viewMode === 'text' }]"
-            @click="viewMode = 'text'"
-          >
-            文本模式
-          </button>
-          <button
-            :class="['toggle-btn', { active: viewMode === 'visual' }]"
-            @click="viewMode = 'visual'"
-          >
-            图解模式
-          </button>
-        </div>
-
-        <div class="modal-content">
-          <div v-if="viewMode === 'text'" class="text-view">
-            <section class="content-section">
-              <h3>漏洞简介</h3>
-              <p>{{ selectedVuln?.description }}</p>
-            </section>
-
-            <section class="content-section">
-              <h3>危害影响</h3>
-              <ul>
-                <li v-for="(impact, index) in selectedVuln?.impact" :key="index">{{ impact }}</li>
-              </ul>
-            </section>
-
-            <section class="content-section">
-              <h3>漏洞原理</h3>
-              <div v-html="selectedVuln?.principle"></div>
-            </section>
-
-            <section class="content-section">
-              <h3>防御方法</h3>
-              <ul>
-                <li v-for="(defense, index) in selectedVuln?.defense" :key="index">{{ defense }}</li>
-              </ul>
-            </section>
-
-            <section class="content-section">
-              <h3>代码示例</h3>
-              <div class="code-example">
-                <pre>{{ selectedVuln?.codeExample }}</pre>
+          <div class="modal-section">
+            <h3>攻击向量</h3>
+            <div class="attack-vectors">
+              <div v-for="vector in currentVulnType?.attackVectors" :key="vector.name" class="vector-item">
+                <strong>{{ vector.name }}</strong>
+                <p>{{ vector.description }}</p>
               </div>
-            </section>
-
-            <section class="content-section">
-              <h3>实战学习</h3>
-              <p>现在去实际操作这个漏洞吧！</p>
-              <button class="go-practice-btn" @click="goPractice">去靶场练习</button>
-            </section>
+            </div>
           </div>
 
-          <div v-if="viewMode === 'visual'" class="visual-view">
-            <div class="diagram-container">
-              <h3 class="diagram-title">攻击流程</h3>
-              <div class="flow-diagram">
-                <div
-                  v-for="(step, index) in selectedVuln?.flowDiagram"
-                  :key="index"
-                  :class="['flow-step', { 'step-active': currentStep === index }]"
-                  @click="currentStep = index"
-                >
-                  <div class="step-number">{{ index + 1 }}</div>
-                  <div class="step-content">
-                    <h4>{{ step.title }}</h4>
-                    <p>{{ step.description }}</p>
-                  </div>
+          <div class="modal-section">
+            <h3>代码示例</h3>
+            <div v-if="currentVulnType?.examples" class="examples-list">
+              <div v-for="example in currentVulnType?.examples" :key="example.title">
+                <h4>{{ example.title }}</h4>
+                <div class="code-block">
+                  <span class="code-label">漏洞代码</span>
+                  <pre><code>{{ example.vulnerable }}</code></pre>
                 </div>
-              </div>
-            </div>
-
-            <div class="compare-section">
-              <div class="compare-card attack">
-                <h4>有漏洞的代码</h4>
-                <pre>{{ selectedVuln?.vulnCode }}</pre>
-              </div>
-              <div class="compare-card secure">
-                <h4>安全的代码</h4>
-                <pre>{{ selectedVuln?.secureCode }}</pre>
-              </div>
-            </div>
-
-            <div class="checklist-section">
-              <h3>安全检查清单</h3>
-              <div class="checklist">
-                <div
-                  v-for="(item, index) in selectedVuln?.checklist"
-                  :key="index"
-                  :class="['check-item', { checked: checkedItems.includes(index) }]"
-                  @click="toggleCheck(index)"
-                >
-                  <span class="check-icon">{{ checkedItems.includes(index) ? '✓' : '○' }}</span>
-                  <span class="check-text">{{ item }}</span>
+                <div class="code-block">
+                  <span class="code-label">攻击Payload</span>
+                  <pre class="payload"><code>{{ example.payload }}</code></pre>
+                </div>
+                <div class="code-block">
+                  <span class="code-label">执行结果</span>
+                  <pre><code>{{ example.result }}</code></pre>
                 </div>
               </div>
             </div>
           </div>
+
+          <div class="modal-section">
+            <h3>防御策略</h3>
+            <div class="defense-list">
+              <div v-for="(defense, index) in currentVulnType?.defenses" :key="index" class="defense-item">
+                <span class="check-icon">✓</span>
+                {{ defense }}
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-section">
+            <h3>真实案例</h3>
+            <div class="cases-list">
+              <div v-for="(caseItem, index) in currentVulnType?.realCases" :key="index" class="case-item">
+                {{ caseItem }}
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-section">
+            <h3>实验信息</h3>
+            <div class="practice-info">
+              <div class="info-row">
+                <strong>场景：</strong>{{ selectedVuln?.scenario }}
+              </div>
+              <div class="info-row">
+                <strong>目标：</strong>{{ selectedVuln?.objective }}
+              </div>
+              <div class="info-row">
+                <strong>Flag：</strong><code>{{ selectedVuln?.flag }}</code>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="footer-btn" @click="closeDetailModal">关闭</button>
         </div>
       </div>
     </div>
@@ -163,56 +154,32 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { categories as vulnCategories, vulnerabilities, difficultyLabels } from '../data/vulnerabilities'
+import { ref, computed } from 'vue'
+import { categories, vulnTypes, vulnerabilities } from '../data/vulnerabilities.js'
 
-const router = useRouter()
-const showDetailModal = ref(false)
-const selectedVuln = ref(null)
 const selectedCategory = ref('all')
-const viewMode = ref('text')
-const currentStep = ref(0)
-const checkedItems = ref([])
-
-const categories = ref([...vulnCategories])
-
-onMounted(() => {
-  categories.value[0].count = vulnerabilities.length
-})
+const selectedVuln = ref(null)
+const showDetailModal = ref(false)
 
 const filteredVulnerabilities = computed(() => {
   if (selectedCategory.value === 'all') {
     return vulnerabilities
   }
-  return vulnerabilities.filter(v => v.category === selectedCategory.value)
+  return vulnerabilities.filter(v => v.type === selectedCategory.value)
 })
 
-const selectCategory = (id) => {
-  selectedCategory.value = id
-  currentStep.value = 0
-  checkedItems.value = []
-}
+const currentVulnType = computed(() => {
+  if (!selectedVuln.value) return null
+  return vulnTypes[selectedVuln.value.type]
+})
 
-const getDifficultyClass = (difficulty) => {
-  const map = {
-    easy: 'easy',
-    medium: 'medium',
-    hard: 'hard'
-  }
-  return map[difficulty] || 'easy'
-}
-
-const getDifficultyLabel = (difficulty) => {
-  return difficultyLabels[difficulty] || difficulty
+const selectCategory = (categoryId) => {
+  selectedCategory.value = categoryId
 }
 
 const openVulnDetail = (vuln) => {
   selectedVuln.value = vuln
   showDetailModal.value = true
-  viewMode.value = 'text'
-  currentStep.value = 0
-  checkedItems.value = []
 }
 
 const closeDetailModal = () => {
@@ -220,101 +187,107 @@ const closeDetailModal = () => {
   selectedVuln.value = null
 }
 
-const toggleCheck = (index) => {
-  const i = checkedItems.value.indexOf(index)
-  if (i > -1) {
-    checkedItems.value.splice(i, 1)
-  } else {
-    checkedItems.value.push(index)
+const getDifficultyClass = (difficulty) => {
+  const classes = {
+    easy: 'easy',
+    medium: 'medium',
+    hard: 'hard'
   }
+  return classes[difficulty] || 'easy'
 }
 
-const goPractice = () => {
-  router.push('/vulnerabilities')
+const getDifficultyLabel = (difficulty) => {
+  const labels = {
+    easy: '简单',
+    medium: '中等',
+    hard: '困难'
+  }
+  return labels[difficulty] || '简单'
 }
 </script>
 
 <style scoped>
 .learning-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f0fdf4 100%);
-  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 30px;
 }
 
 .page-header {
   text-align: center;
   margin-bottom: 30px;
+  color: white;
 }
 
 .page-header h1 {
-  font-size: 2.5rem;
-  color: #1e293b;
+  font-size: 36px;
   margin-bottom: 10px;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
 }
 
 .page-header p {
-  color: #64748b;
-  font-size: 1.1rem;
+  font-size: 16px;
+  opacity: 0.9;
 }
 
 .learning-container {
   display: flex;
-  gap: 20px;
   max-width: 1400px;
   margin: 0 auto;
+  gap: 20px;
 }
 
 .category-sidebar {
-  width: 250px;
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  height: fit-content;
-  position: sticky;
-  top: 20px;
+  width: 240px;
+  flex-shrink: 0;
 }
 
 .category-sidebar h3 {
-  color: #1e293b;
+  font-size: 18px;
   margin-bottom: 15px;
-  font-size: 1.1rem;
+  color: white;
+  padding-left: 10px;
 }
 
 .category-item {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 10px;
-  padding: 12px 15px;
-  margin-bottom: 8px;
-  border-radius: 8px;
+  padding: 14px 18px;
+  margin-bottom: 10px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .category-item:hover {
-  background: #f1f5f9;
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateX(5px);
 }
 
 .category-item.active {
-  background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-  color: white;
+  background: white;
+  color: #667eea;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
 }
 
 .category-name {
-  flex: 1;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 15px;
 }
 
 .category-count {
-  background: rgba(0,0,0,0.1);
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 0.85rem;
+  background: rgba(0, 0, 0, 0.1);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 13px;
 }
 
 .category-item.active .category-count {
-  background: rgba(255,255,255,0.3);
+  background: rgba(102, 126, 234, 0.2);
 }
 
 .content-area {
@@ -323,27 +296,27 @@ const goPractice = () => {
 
 .vulnerabilities-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 20px;
 }
 
 .vuln-card {
   background: white;
-  border-radius: 12px;
-  padding: 20px;
+  border-radius: 16px;
+  padding: 22px;
   cursor: pointer;
   transition: all 0.3s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  border-top: 4px solid transparent;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  border-top: 4px solid #667eea;
 }
 
 .vuln-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  transform: translateY(-5px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
 }
 
 .vuln-card.easy {
-  border-top-color: #22c55e;
+  border-top-color: #10b981;
 }
 
 .vuln-card.medium {
@@ -356,27 +329,27 @@ const goPractice = () => {
 
 .vuln-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  align-items: center;
+  margin-bottom: 14px;
 }
 
 .vuln-header h4 {
-  color: #1e293b;
-  font-size: 1.15rem;
+  font-size: 18px;
+  color: #1a1a2e;
   margin: 0;
 }
 
 .difficulty-badge {
-  padding: 3px 10px;
+  padding: 4px 14px;
   border-radius: 20px;
-  font-size: 0.75rem;
+  font-size: 12px;
   font-weight: 600;
 }
 
 .difficulty-badge.easy {
-  background: #dcfce7;
-  color: #166534;
+  background: #d1fae5;
+  color: #065f46;
 }
 
 .difficulty-badge.medium {
@@ -390,10 +363,10 @@ const goPractice = () => {
 }
 
 .vuln-summary {
-  color: #64748b;
-  margin-bottom: 15px;
+  color: #666;
+  font-size: 14px;
+  margin-bottom: 14px;
   line-height: 1.6;
-  font-size: 0.95rem;
 }
 
 .vuln-tags {
@@ -403,14 +376,19 @@ const goPractice = () => {
 }
 
 .tag {
-  background: #f1f5f9;
-  color: #64748b;
-  padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 0.8rem;
+  padding: 5px 12px;
+  background: #f0f2f5;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #555;
+  transition: all 0.2s;
 }
 
-.detail-modal-overlay {
+.tag:hover {
+  background: #e0e2e5;
+}
+
+.modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -421,324 +399,302 @@ const goPractice = () => {
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  backdrop-filter: blur(5px);
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .detail-modal {
   background: white;
-  border-radius: 16px;
-  width: 90%;
+  border-radius: 20px;
   max-width: 900px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-height: 85vh;
+  width: 90%;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  padding: 25px;
-  border-bottom: 1px solid #e5e7eb;
+  align-items: center;
+  padding: 25px 30px;
+  border-bottom: 1px solid #f0f2f5;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 20px 20px 0 0;
 }
 
-.header-left {
+.header-info {
   display: flex;
   align-items: center;
   gap: 15px;
 }
 
-.modal-header h2 {
+.header-info h2 {
   margin: 0;
-  color: #1e293b;
-  font-size: 1.7rem;
+  font-size: 24px;
+  color: #1a1a2e;
 }
 
-.modal-header h2 + .difficulty-badge {
-  margin-top: 5px;
-  display: inline-block;
-}
-
-.modal-close-btn {
-  background: #f1f5f9;
+.close-btn {
+  width: 36px;
+  height: 36px;
   border: none;
-  color: #64748b;
-  font-size: 1.8rem;
-  width: 40px;
-  height: 40px;
+  background: rgba(0, 0, 0, 0.1);
   border-radius: 50%;
+  font-size: 24px;
+  color: #666;
   cursor: pointer;
   transition: all 0.3s;
 }
 
-.modal-close-btn:hover {
-  background: #e5e7eb;
-  color: #1e293b;
+.close-btn:hover {
+  background: rgba(0, 0, 0, 0.2);
+  transform: rotate(90deg);
 }
 
-.view-toggle {
+.modal-body {
+  padding: 25px 30px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-section {
+  margin-bottom: 25px;
+}
+
+.modal-section:last-child {
+  margin-bottom: 0;
+}
+
+.modal-section h3 {
+  font-size: 17px;
+  margin: 0 0 15px 0;
+  color: #1a1a2e;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #f0f2f5;
+}
+
+.modal-section p {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.principle-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.principle-list li {
   display: flex;
-  gap: 10px;
-  padding: 15px 25px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  padding: 12px;
   background: #f8fafc;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.toggle-btn {
-  padding: 8px 20px;
-  border: 2px solid #e5e7eb;
-  background: white;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.3s;
-}
-
-.toggle-btn:hover {
-  border-color: #0ea5e9;
-}
-
-.toggle-btn.active {
-  background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-  color: white;
-  border-color: transparent;
-}
-
-.modal-content {
-  padding: 25px;
-}
-
-.content-section {
-  margin-bottom: 30px;
-}
-
-.content-section h3 {
-  color: #1e293b;
-  font-size: 1.25rem;
-  margin-bottom: 15px;
-}
-
-.content-section p {
-  color: #475569;
-  line-height: 1.8;
-}
-
-.content-section ul {
-  color: #475569;
-  line-height: 1.8;
-  padding-left: 20px;
-}
-
-.content-section li {
-  margin-bottom: 8px;
-}
-
-.content-section pre {
-  background: #1e293b;
-  color: #e2e8f0;
-  padding: 15px;
-  border-radius: 8px;
-  overflow-x: auto;
-  line-height: 1.6;
-}
-
-.code-example {
-  margin-top: 10px;
-}
-
-.go-practice-btn {
-  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
-  color: white;
-  border: none;
-  padding: 12px 30px;
-  border-radius: 8px;
-  font-size: 1rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-  margin-top: 10px;
-}
-
-.go-practice-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 20px rgba(34, 197, 94, 0.4);
-}
-
-.diagram-container {
-  margin-bottom: 30px;
-}
-
-.diagram-title {
-  color: #1e293b;
-  font-size: 1.3rem;
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.flow-diagram {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.flow-step {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  background: #f8fafc;
-  padding: 20px;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s;
-  border: 2px solid transparent;
-}
-
-.flow-step:hover {
-  background: #f1f5f9;
-}
-
-.flow-step.step-active {
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.1) 0%, rgba(6, 182, 212, 0.1) 100%);
-  border-color: #0ea5e9;
+  border-radius: 10px;
+  border-left: 4px solid #667eea;
 }
 
 .step-number {
-  width: 36px;
-  height: 36px;
-  background: #0ea5e9;
-  color: white;
-  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: #667eea;
+  color: white;
+  border-radius: 50%;
+  font-size: 13px;
   font-weight: 600;
-  font-size: 0.9rem;
+  margin-right: 12px;
+  flex-shrink: 0;
 }
 
-.step-content {
-  flex: 1;
-}
-
-.step-content h4 {
-  margin: 0 0 5px;
-  color: #1e293b;
-}
-
-.step-content p {
-  margin: 0;
-  color: #64748b;
-}
-
-.compare-section {
+.impact-list {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 30px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
 }
 
-.compare-card {
+.impact-item {
+  padding: 12px 15px;
+  background: #fef3c7;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #92400e;
+  border-left: 4px solid #f59e0b;
+}
+
+.attack-vectors {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.vector-item {
+  padding: 15px;
+  background: #f8fafc;
+  border-radius: 10px;
+}
+
+.vector-item strong {
+  color: #1a1a2e;
+  display: block;
+  margin-bottom: 6px;
+}
+
+.vector-item p {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.examples-list {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.examples-list h4 {
+  margin: 0 0 15px 0;
+  color: #1a1a2e;
+  font-size: 16px;
+}
+
+.code-block {
+  margin-bottom: 15px;
+}
+
+.code-block:last-child {
+  margin-bottom: 0;
+}
+
+.code-label {
+  display: inline-block;
+  padding: 4px 12px;
+  background: #667eea;
+  color: white;
+  border-radius: 6px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 16px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-family: 'Fira Code', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.code-block .payload {
+  background: #1e1b4b;
+  border: 1px solid #4f46e5;
+}
+
+.defense-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.defense-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 15px;
+  background: #d1fae5;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #065f46;
+}
+
+.check-icon {
+  margin-right: 10px;
+  font-weight: bold;
+}
+
+.cases-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.case-item {
+  padding: 15px;
+  background: #f8fafc;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #555;
+  border-left: 4px solid #3b82f6;
+}
+
+.practice-info {
+  background: #f8fafc;
   padding: 20px;
   border-radius: 12px;
 }
 
-.compare-card.attack {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+.info-row {
+  font-size: 14px;
+  margin-bottom: 10px;
+  color: #333;
 }
 
-.compare-card.secure {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
-  border: 1px solid rgba(34, 197, 94, 0.2);
+.info-row:last-child {
+  margin-bottom: 0;
 }
 
-.compare-card h4 {
-  margin: 0 0 15px;
+.info-row code {
+  background: #e8f5e9;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: #065f46;
+  font-family: 'Fira Code', monospace;
 }
 
-.compare-card.attack h4 {
-  color: #dc2626;
-}
-
-.compare-card.secure h4 {
-  color: #16a34a;
-}
-
-.compare-card pre {
-  margin: 0;
-  padding: 12px;
-  border-radius: 8px;
-  font-size: 0.85rem;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-.compare-card.attack pre {
-  background: rgba(239, 68, 68, 0.1);
-}
-
-.compare-card.secure pre {
-  background: rgba(34, 197, 94, 0.1);
-}
-
-.checklist-section {
-  margin-top: 30px;
-}
-
-.checklist-section h3 {
-  color: #1e293b;
-  margin-bottom: 15px;
-}
-
-.checklist {
+.modal-footer {
+  padding: 20px 30px;
+  border-top: 1px solid #f0f2f5;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  justify-content: flex-end;
 }
 
-.check-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 15px;
-  background: #f8fafc;
-  border-radius: 8px;
+.footer-btn {
+  padding: 12px 30px;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-size: 15px;
   cursor: pointer;
   transition: all 0.3s;
 }
 
-.check-item:hover {
-  background: #f1f5f9;
-}
-
-.check-item.checked {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%);
-}
-
-.check-icon {
-  font-size: 1.3rem;
-  color: #22c55e;
-}
-
-.check-text {
-  color: #1e293b;
-  flex: 1;
-}
-
-@media (max-width: 900px) {
-  .learning-container {
-    flex-direction: column;
-  }
-
-  .category-sidebar {
-    width: 100%;
-    position: static;
-  }
-
-  .vulnerabilities-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .compare-section {
-    grid-template-columns: 1fr;
-  }
+.footer-btn:hover {
+  background: #5a6fd6;
+  transform: translateY(-2px);
 }
 </style>

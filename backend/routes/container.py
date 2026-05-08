@@ -164,6 +164,18 @@ def create_container():
         if not vulnerability_type or not isinstance(vulnerability_type, str):
             return jsonify({'success': False, 'message': '漏洞类型无效'}), 400
 
+        if vulnerability_type in ['SQL注入-中级', 'SQL注入-高级']:
+            level = 'medium' if vulnerability_type == 'SQL注入-中级' else 'hard'
+            return jsonify({
+                'success': True,
+                'container_id': f'sqli-lab-{level}',
+                'container_name': f'sqli-lab-{level}',
+                'host_port': 8000,
+                'vulnerability_type': vulnerability_type,
+                'lab_url': f'/api/sqli-lab/{level}',
+                'message': 'SQL注入实验环境已就绪'
+            })
+
         print(f"[DEBUG] Calling cleanup_expired_containers for user {user_id}")
         cleanup_expired_containers(user_id)
         print(f"[DEBUG] cleanup_expired_containers completed")

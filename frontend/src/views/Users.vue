@@ -145,7 +145,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { ElMessageBox } from 'element-plus'
+import { ElMessageBox, ElMessage } from 'element-plus'
 import { users as usersApi } from '../api'
 
 const users = ref([])
@@ -374,13 +374,16 @@ const saveUser = async () => {
   try {
     if (editingUser.value) {
       await usersApi.update(editingUser.value.id, formData.value)
+      ElMessage.success('用户更新成功')
     } else {
       await usersApi.create(formData.value)
+      ElMessage.success('用户添加成功')
     }
     closeModal()
     await loadUsers()
   } catch (error) {
     console.error('保存用户失败:', error)
+    ElMessage.error('保存用户失败: ' + error.message)
   }
 }
 

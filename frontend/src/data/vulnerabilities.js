@@ -1,384 +1,434 @@
 export const categories = [
-  { id: 'all', name: '全部漏洞', count: 0 },
+  { id: 'all', name: '全部漏洞', count: 11 },
   { id: 'sqli', name: 'SQL注入', count: 3 },
   { id: 'xss', name: 'XSS攻击', count: 3 },
-  { id: 'csrf', name: 'CSRF攻击', count: 1 },
+  { id: 'csrf', name: 'CSRF攻击', count: 2 },
   { id: 'deserialization', name: '反序列化', count: 2 },
   { id: 'upload', name: '文件上传', count: 1 }
 ]
+
+export const vulnTypes = {
+  sqli: {
+    name: 'SQL注入',
+    icon: 'database',
+    color: '#ef4444',
+    description: 'SQL注入是一种通过在输入中注入恶意SQL语句来操纵数据库的攻击技术。',
+    principles: [
+      '应用程序直接将用户输入拼接到SQL语句中',
+      '攻击者构造恶意输入绕过验证逻辑',
+      '数据库执行恶意SQL导致数据泄露或篡改'
+    ],
+    impacts: [
+      '数据泄露：获取敏感数据如用户名、密码',
+      '数据篡改：修改或删除数据库记录',
+      '权限提升：获取数据库管理员权限',
+      '服务器控制：通过SQL注入执行系统命令'
+    ],
+    attackVectors: [
+      { name: '登录绕过', description: "使用 ' OR 1=1-- 绕过登录验证" },
+      { name: '数据枚举', description: "使用 UNION SELECT 联合查询获取数据" },
+      { name: '盲注攻击', description: "通过布尔值或时间延迟判断数据" },
+      { name: '堆叠查询', description: "执行多条SQL语句" }
+    ],
+    defenses: [
+      '使用参数化查询（Prepared Statements）',
+      '使用ORM框架避免直接SQL拼接',
+      '对用户输入进行严格验证和过滤',
+      '最小权限原则配置数据库用户',
+      '部署Web应用防火墙（WAF）'
+    ],
+    examples: [
+      {
+        title: '登录绕过',
+        vulnerable: "SELECT * FROM users WHERE username = '$username' AND password = '$password'",
+        payload: "' OR '1'='1",
+        result: "SELECT * FROM users WHERE username = '' OR '1'='1' AND password = ''"
+      },
+      {
+        title: '联合查询',
+        vulnerable: "SELECT name, email FROM users WHERE id = $id",
+        payload: "1 UNION SELECT username, password FROM admin",
+        result: "SELECT name, email FROM users WHERE id = 1 UNION SELECT username, password FROM admin"
+      }
+    ],
+    realCases: [
+      '2016年雅虎数据泄露事件，攻击者通过SQL注入获取5亿用户数据',
+      '2019年Capital One数据泄露，通过SQL注入暴露1.06亿用户信息'
+    ]
+  },
+  xss: {
+    name: '跨站脚本攻击',
+    icon: 'code',
+    color: '#f59e0b',
+    description: 'XSS攻击是指攻击者通过在Web页面中注入恶意脚本，当用户访问时执行恶意代码。',
+    types: [
+      { name: '反射型XSS', description: '恶意脚本通过URL参数传入，服务器反射给用户', severity: '中' },
+      { name: '存储型XSS', description: '恶意脚本存储在服务器，所有访问者都会执行', severity: '高' },
+      { name: 'DOM型XSS', description: '恶意脚本在客户端通过JavaScript动态执行', severity: '中' }
+    ],
+    impacts: [
+      '窃取用户Cookie和Session信息',
+      '劫持用户会话，冒充用户身份',
+      '钓鱼攻击，诱导用户点击恶意链接',
+      '传播恶意软件或勒索软件'
+    ],
+    attackVectors: [
+      { name: '表单输入', description: '在表单中输入<script>恶意代码</script>' },
+      { name: 'URL参数', description: '通过URL参数注入脚本' },
+      { name: '富文本编辑器', description: '利用富文本编辑器漏洞插入脚本' },
+      { name: 'HTML属性注入', description: "在属性中注入事件处理器如 onload='恶意代码'" }
+    ],
+    defenses: [
+      '对用户输入进行HTML实体编码',
+      '使用Content Security Policy（CSP）',
+      '验证用户输入格式和长度',
+      '使用安全的JavaScript框架自动转义',
+      '设置HttpOnly和Secure Cookie属性'
+    ],
+    examples: [
+      {
+        title: '反射型XSS',
+        vulnerable: "<div>搜索结果: userInput</div>",
+        payload: "<script>alert('XSS')</script>",
+        result: "<div>搜索结果: <script>alert('XSS')</script></div>"
+      },
+      {
+        title: 'DOM型XSS',
+        vulnerable: "document.getElementById('output').innerHTML = inputValue;",
+        payload: "<img src=x onerror=alert('XSS')>",
+        result: "innerHTML执行了恶意脚本"
+      }
+    ],
+    realCases: [
+      '2013年Twitter XSS漏洞，攻击者发布恶意推文影响大量用户',
+      '2015年Facebook XSS漏洞，可被利用劫持用户会话'
+    ]
+  },
+  csrf: {
+    name: '跨站请求伪造',
+    icon: 'shield-alert',
+    color: '#3b82f6',
+    description: 'CSRF攻击是指攻击者诱导用户在已登录状态下执行非预期操作的攻击方式。',
+    principles: [
+      '用户已登录目标网站，持有有效Session',
+      '攻击者构造恶意链接或表单',
+      '用户在不知情的情况下点击或提交',
+      '服务器误认为是用户的合法请求'
+    ],
+    impacts: [
+      '未经授权的操作如修改密码、转账',
+      '数据删除或篡改',
+      '账户被劫持或权限被修改',
+      '执行恶意操作如发布不良内容'
+    ],
+    attackVectors: [
+      { name: '恶意链接', description: '通过邮件或消息发送恶意URL' },
+      { name: '隐藏表单', description: '在页面中嵌入自动提交的表单' },
+      { name: '图片标签', description: "利用<img>标签发起GET请求" },
+      { name: 'JSON劫持', description: '利用JSONP或CORS漏洞' }
+    ],
+    defenses: [
+      '使用CSRF Token验证',
+      '验证请求来源（Referer检查）',
+      '使用SameSite Cookie属性',
+      '对敏感操作要求重新验证身份',
+      '使用POST方法处理敏感操作'
+    ],
+    examples: [
+      {
+        title: '恶意图片标签',
+        vulnerable: "<img src='http://bank.com/transfer?to=attacker&amount=1000'>",
+        payload: "在论坛发帖包含此图片",
+        result: "用户浏览帖子时自动发起转账请求"
+      },
+      {
+        title: '自动提交表单',
+        vulnerable: "<form action='http://example.com/change_password' method='POST'>...</form>",
+        payload: "页面加载时自动提交表单",
+        result: "用户密码被修改"
+      }
+    ],
+    realCases: [
+      '2008年Gmail CSRF漏洞，可被利用添加恶意邮箱转发规则',
+      '2012年GitHub CSRF漏洞，可被利用创建仓库和添加协作人员'
+    ]
+  },
+  deserialization: {
+    name: '反序列化漏洞',
+    icon: 'package',
+    color: '#8b5cf6',
+    description: '反序列化漏洞是指攻击者通过构造恶意序列化数据，在反序列化过程中执行任意代码。',
+    principles: [
+      '应用程序接收序列化数据并反序列化',
+      '攻击者构造恶意对象数据',
+      '反序列化时触发对象的魔术方法',
+      '恶意代码在服务器端执行'
+    ],
+    impacts: [
+      '远程代码执行（RCE）',
+      '服务器完全控制',
+      '数据泄露',
+      '权限提升'
+    ],
+    attackVectors: [
+      { name: 'PHP反序列化', description: '利用__wakeup、__destruct等魔术方法' },
+      { name: 'Java反序列化', description: '利用Apache Commons Collections等库的gadget链' },
+      { name: 'Python反序列化', description: '利用pickle模块的漏洞' },
+      { name: '.NET反序列化', description: '利用BinaryFormatter等反序列化器' }
+    ],
+    defenses: [
+      '避免反序列化不可信数据',
+      '使用白名单验证反序列化的类',
+      '使用安全的序列化格式如JSON',
+      '及时更新依赖库修复已知漏洞',
+      '限制反序列化的权限'
+    ],
+    examples: [
+      {
+        title: 'PHP反序列化',
+        vulnerable: "$obj = unserialize($_GET['data']);",
+        payload: "O:8:\"User\":1:{s:8:\"username\";s:5:\"admin\";}",
+        result: "恶意对象被反序列化并执行魔术方法"
+      },
+      {
+        title: 'Java反序列化',
+        vulnerable: "ObjectInputStream.readObject(inputStream);",
+        payload: "构造包含恶意gadget链的序列化数据",
+        result: "执行任意代码获取服务器控制"
+      }
+    ],
+    realCases: [
+      '2017年Apache Struts2 S2-045漏洞，影响大量企业应用',
+      '2021年Log4j漏洞（虽然不是反序列化，但展示了序列化数据的危险）'
+    ]
+  },
+  upload: {
+    name: '文件上传漏洞',
+    icon: 'upload',
+    color: '#10b981',
+    description: '文件上传漏洞是指攻击者通过上传恶意文件如WebShell来获取服务器控制权。',
+    principles: [
+      '应用程序允许用户上传文件',
+      '未对文件类型、大小、内容进行有效验证',
+      '上传的恶意文件可被执行',
+      '攻击者获取服务器访问权限'
+    ],
+    impacts: [
+      'WebShell上传获取服务器控制',
+      '恶意软件传播',
+      '文件覆盖导致数据丢失',
+      '服务器被用作攻击跳板'
+    ],
+    attackVectors: [
+      { name: '扩展名绕过', description: '修改文件扩展名如 .php -> .php.jpg' },
+      { name: 'MIME类型绕过', description: '修改Content-Type头' },
+      { name: '文件内容绕过', description: '在合法文件中嵌入恶意代码' },
+      { name: '路径遍历', description: '通过../访问上级目录' }
+    ],
+    defenses: [
+      '验证文件类型（白名单）',
+      '验证文件内容（魔术字节检查）',
+      '限制文件大小',
+      '使用随机文件名',
+      '将上传目录设置为不可执行',
+      '使用文件存储服务如OSS'
+    ],
+    examples: [
+      {
+        title: '扩展名绕过',
+        vulnerable: "只检查扩展名是否在允许列表中",
+        payload: "shell.php%00.jpg",
+        result: "文件名被截断，实际保存为shell.php"
+      },
+      {
+        title: '内容验证绕过',
+        vulnerable: "只检查文件头是否为图片",
+        payload: "GIF89a<?php phpinfo(); ?>",
+        result: "文件被识别为图片但包含PHP代码"
+      }
+    ],
+    realCases: [
+      '2017年Equifax数据泄露，通过文件上传漏洞入侵',
+      '2020年某大型电商平台被上传WebShell导致数据泄露'
+    ]
+  }
+}
 
 export const vulnerabilities = [
   {
     id: 1,
     name: 'SQL注入-初级',
-    category: 'sqli',
+    type: 'sqli',
     difficulty: 'easy',
-    summary: '简单的SQL注入入门，学习基本绕过登录',
-    tags: ['入门', '登录绕过'],
-    description: 'SQL注入（SQL Injection）是一种常见的Web安全漏洞，攻击者通过在输入框中注入恶意的SQL代码，来操纵后端数据库执行未授权的操作。这是最严重的漏洞之一，可能导致数据泄露、数据篡改、服务器控制等严重后果。',
-    impact: [
-      '数据泄露：攻击者可以读取敏感数据（用户信息、密码等）',
-      '数据篡改：修改数据库中的数据',
-      '数据删除：删除重要数据',
-      '服务器控制：获取服务器控制权'
+    summary: '学习基本的SQL注入概念，掌握登录绕过技巧',
+    tags: ['入门', '登录绕过', '基础'],
+    scenario: '登录页面存在SQL注入漏洞，尝试绕过登录验证',
+    objective: '通过SQL注入绕过登录，获取管理员权限',
+    hints: [
+      '尝试在用户名输入框中输入特殊字符',
+      "考虑使用 ' OR 1=1-- 这样的payload",
+      '注意SQL语句的闭合方式'
     ],
-    principle: '<p>当应用程序直接将用户输入拼接到SQL查询语句中时，就会产生SQL注入漏洞。例如：</p><pre><code>username = GET["username"]\nsql = "SELECT * FROM users WHERE username = \'" + username + "\'"</code></pre><p>如果用户输入 <code>\' OR 1=1 --</code>，SQL就会变成：</p><pre><code>SELECT * FROM users WHERE username = \'\' OR 1=1 --\'</code></pre><p>这时1=1永远为真，查询会返回所有用户记录。</p>',
-    defense: [
-      '使用参数化查询（Prepared Statements）',
-      '使用ORM框架',
-      '对用户输入进行严格的验证和过滤',
-      '最小权限原则：数据库用户权限最小化',
-      '使用WAF（Web应用防火墙）'
-    ],
-    codeExample: `// 错误写法 - 直接拼接
-$username = $_POST['username'];
-$sql = "SELECT * FROM users WHERE username = '$username'";
-
-// 正确写法 - 参数化查询
-$stmt = $pdo->prepare("SELECT * FROM users WHERE username = ?");
-$stmt->execute([$username]);
-
-// 正确写法 - 使用ORM
-$user = User::where('username', $username)->first();`,
-    flowDiagram: [
-      { title: '用户输入', description: '用户在表单中输入恶意SQL语句' },
-      { title: 'SQL拼接', description: '后端将用户输入直接拼接到SQL语句中' },
-      { title: '数据库执行', description: '数据库执行了被篡改的SQL' },
-      { title: '绕过验证', description: '恶意SQL使条件永真，成功绕过' },
-      { title: '获取数据', description: '攻击者成功获取敏感数据' }
-    ],
-    vulnCode: `// 有漏洞的代码
-username = request.form['username']
-password = request.form['password']
-
-sql = f"""SELECT * FROM users
-         WHERE username = '{username}'
-         AND password = '{password}'"""
-
-result = db.execute(sql)`,
-    secureCode: `// 安全的代码
-username = request.form['username']
-password = request.form['password']
-
-// 使用参数化查询
-sql = """SELECT * FROM users
-         WHERE username = ?
-         AND password = ?"""
-
-result = db.execute(
-    sql,
-    (username, password)
-)`,
-    checklist: [
-      '使用参数化查询代替字符串拼接',
-      '验证用户输入的类型和长度',
-      '数据库用户使用最小权限',
-      '配置Web应用防火墙',
-      '定期审计代码中的SQL查询',
-      '使用ORM框架'
-    ]
+    flag: 'Mlai{SQLi-Easy-Success}'
   },
   {
     id: 2,
     name: 'SQL注入-中级',
-    category: 'sqli',
+    type: 'sqli',
     difficulty: 'medium',
-    summary: '学习绕过简单过滤的SQL注入技巧',
-    tags: ['中级', '绕过WAF'],
-    description: '中级SQL注入需要绕过一些基本的过滤，比如注释符过滤、关键字过滤等。这时候需要学习更复杂的注入技巧。',
-    impact: [
-      '绕过滤后可以进行更深入的注入',
-      '获取更多敏感数据',
-      '甚至可以写文件或执行命令'
+    summary: '学习联合查询和数据枚举技巧',
+    tags: ['联合查询', '数据枚举', 'UNION'],
+    scenario: '用户列表页面存在SQL注入漏洞，可以获取更多数据',
+    objective: '通过UNION查询获取管理员密码',
+    hints: [
+      '尝试使用UNION SELECT语句',
+      '需要知道表名和列名',
+      '可以使用ORDER BY判断列数'
     ],
-    principle: '<p>当应用程序过滤了常见的SQL注入关键词时，可以通过各种绕过技巧继续注入：</p><ul><li>大小写绕过：SELECT → sElEcT</li><li>注释替换：空格 → /**/</li><li>双写绕过：UNION → UNUNIONION</li><li>编码绕过：URL编码、十六进制</li></ul>',
-    defense: [
-      '使用白名单而非黑名单',
-      '使用预编译语句',
-      '配置更严格的WAF规则',
-      '输入长度限制'
-    ],
-    codeExample: `// 被过滤的写法
-'union select 1,2,3 --
-
-// 绕过技巧
-'UN/**/ION SEL/**/ECT 1,2,3
-'sElEcT 1,2,3
-'ununionion selselectect 1,2,3`,
-    flowDiagram: [
-      { title: '检测过滤', description: '先测试哪些关键词被过滤' },
-      { title: '寻找绕过', description: '尝试各种绕过技巧' },
-      { title: '成功注入', description: '使用合适的方法绕过' },
-      { title: '获取数据', description: '通过盲注等方法提取数据' }
-    ],
-    vulnCode: `// 简单过滤无效
-username = request.form['username']
-// 只过滤了UNION
-username = username.replace('UNION', '')
-// 但双写可以绕过：UNUNIONION -> UNION`,
-    secureCode: `// 使用参数化查询
-stmt = db.prepare("SELECT * FROM users WHERE id = ?")
-stmt.execute([user_id])`,
-    checklist: [
-      '不依赖黑名单过滤',
-      '使用参数化查询',
-      '配置WAF检测异常SQL',
-      '限制输入长度'
-    ]
+    flag: 'Mlai{SQLi-Medium-Success}'
   },
   {
     id: 3,
-    name: '反射型XSS',
-    category: 'xss',
-    difficulty: 'easy',
-    summary: '学习基础的反射型跨站脚本攻击',
-    tags: ['入门', 'XSS'],
-    description: '反射型XSS（Reflected XSS）是最常见的XSS类型，恶意脚本不会存储在服务器上，而是通过URL参数反射到页面上。',
-    impact: [
-      '窃取用户Cookie和会话',
-      '伪造用户操作',
-      '钓鱼攻击',
-      '重定向到恶意网站'
+    name: 'SQL注入-高级',
+    type: 'sqli',
+    difficulty: 'hard',
+    summary: '学习盲注技术和高级绕过技巧',
+    tags: ['盲注', '时间盲注', '布尔盲注'],
+    scenario: '页面没有直接输出，但可以通过时间延迟判断',
+    objective: '通过盲注技术获取数据库中的flag',
+    hints: [
+      '尝试使用IF条件语句',
+      '使用SLEEP()函数判断执行',
+      '可以编写脚本自动化注入'
     ],
-    principle: '<p>当应用程序将URL参数直接输出到HTML页面中时，就产生了反射型XSS：</p><pre><code>// 搜索参数直接输出\nsearch = request.GET["q"]\necho "<h1>搜索结果: " + search + "</h1>"</code></pre><p>用户访问 <code>?q=&lt;script&gt;alert(1)&lt;/script&gt;</code> 时，脚本就会执行。</p>',
-    defense: [
-      '对输出进行HTML转义',
-      '使用Content Security Policy (CSP)',
-      '使用HttpOnly cookie',
-      '输入验证和过滤'
-    ],
-    codeExample: `// 有漏洞的代码
-search = req.query.search;
-res.send(\`<div>搜索: \${search}</div>\`);
-
-// 安全的代码
-search = escapeHTML(req.query.search);
-res.send(\`<div>搜索: \${search}</div>\`);
-
-// 使用框架自动转义
-res.render('search', { search: req.query.search });`,
-    flowDiagram: [
-      { title: '构造恶意URL', description: '攻击者构造包含XSS的URL' },
-      { title: '发送给用户', description: '通过邮件/聊天发送恶意链接' },
-      { title: '用户点击', description: '用户点击链接访问' },
-      { title: '脚本执行', description: '页面渲染时执行恶意脚本' },
-      { title: '数据泄露', description: 'Cookie等敏感信息被盗取' }
-    ],
-    vulnCode: `// 直接输出用户输入
-<%
-  String name = request.getParameter("name");
-  out.println("Hello, " + name);
-%>
-
-// 访问 ?name=<scr" + "ipt>steal()</scr" + "ipt>`,
-    secureCode: `// HTML转义输出
-<%
-  String name = request.getParameter("name");
-  out.println("Hello, " + escapeHtml(name));
-%>
-
-// 或使用JSTL自动转义
-<c:out value="\\${name}" />`,
-    checklist: [
-      '所有输出到HTML的内容都要转义',
-      '设置HttpOnly标记防止Cookie窃取',
-      '配置CSP策略',
-      '避免使用innerHTML插入用户输入'
-    ]
+    flag: 'Mlai{SQLi-Hard-Success}'
   },
   {
     id: 4,
-    name: '存储型XSS',
-    category: 'xss',
-    difficulty: 'hard',
-    summary: '存储型XSS是最危险的XSS类型',
-    tags: ['危险', '持久化'],
-    description: '存储型XSS（Stored XSS）的恶意代码会存储在数据库中，每当有用户访问受影响的页面时，脚本都会执行。',
-    impact: [
-      '影响所有访问的用户',
-      '持久化存在',
-      '大规模攻击',
-      '难以彻底清除'
+    name: '反射型XSS',
+    type: 'xss',
+    difficulty: 'easy',
+    summary: '学习反射型XSS攻击原理',
+    tags: ['反射型', 'URL参数', '入门'],
+    scenario: '搜索功能存在XSS漏洞，输入会直接显示在页面上',
+    objective: '通过XSS注入获取页面中的flag',
+    hints: [
+      '尝试在搜索框中输入<script>标签',
+      '调用页面中已定义的函数',
+      '注意特殊字符的编码'
     ],
-    principle: '<p>当用户提交的内容被存储到数据库，然后在页面上展示时没有转义：</p><pre><code>// 用户提交评论\ncomment = request.form["comment"]\ndb.save(comment)\n\n// 其他用户查看\necho "<div>" + comment + "</div>"</code></pre><p>如果评论包含<scr" + "ipt>alert(1)</scr" + "ipt>，所有访问的用户都会受影响。</p>',
-    defense: [
-      '输入时进行严格验证',
-      '输出时进行完整HTML转义',
-      '使用富文本编辑器时使用白名单',
-      '配置严格的CSP'
-    ],
-    codeExample: `// 存储后直接输出
-comment = request.form.comment
-db.comments.insertOne({ text: comment })
-
-// 输出时
-for (const c of comments) {
-  document.getElementById('comments').innerHTML +=
-    '<div>' + c.text + '</div>';
-}
-
-// 安全处理
-function sanitizeHTML(str) {
-  return str.replace(/[&<>"]/g, m => ({
-    '&': '&amp;', '<': '&lt;',
-    '>': '&gt;', '"': '&quot;'
-  })[m])
-}
-
-// 输出时转义
-innerHTML = sanitizeHTML(c.text);`,
-    flowDiagram: [
-      { title: '提交恶意内容', description: '攻击者在表单提交XSS payload' },
-      { title: '存储到数据库', description: '恶意内容保存到数据库' },
-      { title: '用户访问', description: '其他用户访问包含内容的页面' },
-      { title: '脚本自动执行', description: '页面加载时XSS自动执行' },
-      { title: '大规模感染', description: '所有访问用户都受影响' }
-    ],
-    vulnCode: `// 直接保存和输出
-post = request.body.post
-Post.create({ content: post })
-
-// 直接输出
-res.send(post.content)`,
-    secureCode: `// 存储前验证 + 输出时转义
-post = sanitizeHTML(request.body.post)
-Post.create({ content: post })
-
-// 使用DOMPurify库
-post = DOMPurify.sanitize(request.body.post)`,
-    checklist: [
-      '用户生成内容必须严格过滤',
-      '输出时转义是最后防线',
-      '使用DOMPurify等专业库',
-      'CSP禁止内联脚本'
-    ]
+    flag: 'Mlai{XSS-Reflected-Success}'
   },
   {
     id: 5,
-    name: '文件上传漏洞',
-    category: 'upload',
+    name: '存储型XSS',
+    type: 'xss',
     difficulty: 'medium',
-    summary: '学习绕过文件上传限制的方法',
-    tags: ['上传', 'Webshell'],
-    description: '文件上传漏洞允许攻击者上传任意文件，最常见的是上传脚本文件（如.php、.jsp）并获取服务器执行权限。',
-    impact: [
-      '上传Webshell获取服务器权限',
-      '上传恶意HTML进行XSS',
-      '上传病毒/后门程序',
-      '覆盖重要文件'
+    summary: '学习存储型XSS攻击，恶意代码持久化存储',
+    tags: ['存储型', '持久化', '留言板'],
+    scenario: '留言板功能存在XSS漏洞，留言会被存储并显示',
+    objective: '注入恶意脚本并获取flag',
+    hints: [
+      '在留言框中输入恶意脚本',
+      '脚本会在所有访问者页面执行',
+      '可以窃取其他用户的信息'
     ],
-    principle: '<p>当文件上传功能验证不严格时，攻击者可以：</p><ul><li>更改扩展名绕过：.php → .php5</li><li>双扩展名：.php.jpg</li><li>Content-Type伪造</li><li>文件内容伪造</li></ul>',
-    defense: [
-      '白名单验证文件扩展名',
-      '验证文件内容类型',
-      '重命名文件',
-      '禁止上传目录执行权限',
-      '文件上传到非Web可访问目录'
-    ],
-    codeExample: `// 简单扩展名检查
-ext = file.filename.split('.').pop()
-if ext not in ['jpg', 'png', 'gif']:
-    return 'Invalid file'
-// 可以用 .php.jpg 或 .php5 绕过
-
-// 严格验证
-ALLOWED_EXT = {'jpg', 'png', 'gif'}
-ALLOWED_MIME = {'image/jpeg', 'image/png'}
-ext = file.filename.split('.').pop().lower()
-if ext not in ALLOWED_EXT:
-    return 'Invalid'
-if file.mime not in ALLOWED_MIME:
-    return 'Invalid'
-// 重命名
-new_name = uuid.uuid4().hex + '.' + ext
-save_to = '/uploads/' + new_name
-// 设置权限
-os.chmod(save_to, 0o644)`,
-    flowDiagram: [
-      { title: '上传Webshell', description: '构造恶意文件绕过验证' },
-      { title: '上传成功', description: '服务器保存恶意文件' },
-      { title: '访问执行', description: '通过URL访问执行脚本' },
-      { title: '获取Shell', description: '成功获得服务器控制权' }
-    ],
-    vulnCode: `// 只检查扩展名
-file = req.files.upload
-ext = path.extname(file.name)
-if ext === '.php' { throw 'Invalid' }
-
-// 多重验证
-if (!isImage(file.data)) { throw 'Not image' }
-safeName = uuid() + '.jpg'
-file.mv('/uploads/' + safeName)`,
-    checklist: [
-      '验证文件扩展名白名单',
-      '验证文件内容格式',
-      '重命名上传文件',
-      '上传目录无执行权限',
-      '文件存储在Web根以外'
-    ]
+    flag: 'Mlai{XSS-Stored-Success}'
   },
   {
     id: 6,
+    name: 'DOM型XSS',
+    type: 'xss',
+    difficulty: 'medium',
+    summary: '学习DOM型XSS攻击，了解客户端漏洞',
+    tags: ['DOM型', '客户端', 'innerHTML'],
+    scenario: '页面使用innerHTML动态更新内容，存在XSS风险',
+    objective: '通过DOM注入获取flag',
+    hints: [
+      '查看页面源代码了解JavaScript逻辑',
+      '尝试在输入框中注入脚本',
+      '注意innerHTML不会执行<script>标签，可以使用其他方式'
+    ],
+    flag: 'Mlai{XSS-DOM-Success}'
+  },
+  {
+    id: 7,
     name: 'PHP反序列化',
-    category: 'deserialization',
+    type: 'deserialization',
     difficulty: 'hard',
-    summary: '反序列化漏洞可导致远程代码执行',
-    tags: ['RCE', '危险'],
-    description: 'PHP反序列化漏洞允许攻击者通过构造恶意的序列化字符串，在unserialize()时执行危险代码，导致远程代码执行。',
-    impact: [
-      '远程代码执行 (RCE)',
-      '任意文件读写',
-      '服务器控制',
-      '权限提升'
+    summary: '学习PHP反序列化漏洞的原理和利用',
+    tags: ['PHP', '魔术方法', '代码执行'],
+    scenario: '应用程序存在反序列化漏洞，可以执行任意代码',
+    objective: '构造恶意序列化数据获取flag',
+    hints: [
+      '了解PHP魔术方法如__wakeup、__destruct',
+      '需要找到可利用的类',
+      '可以使用工具生成payload'
     ],
-    principle: '<p>当类存在__destruct()或__wakeup()等魔术方法时：</p><pre><code>class User {\n  function __destruct() {\n    unlink(\$this->file);\n  }\n}\nunserialize(\$_GET[\'data\']);</code></pre><p>攻击者可以构造恶意对象删除任意文件。</p>',
-    defense: [
-      '禁止反序列化不可信数据',
-      '使用JSON代替serialize',
-      '升级PHP版本',
-      '禁用危险函数'
+    flag: 'Mlai{PHP-Deserialization-Success}'
+  },
+  {
+    id: 8,
+    name: '文件上传',
+    type: 'upload',
+    difficulty: 'medium',
+    summary: '学习文件上传漏洞的各种绕过技巧',
+    tags: ['文件上传', 'WebShell', '绕过'],
+    scenario: '文件上传功能存在漏洞，可以上传恶意文件',
+    objective: '上传WebShell并获取flag',
+    hints: [
+      '尝试上传不同扩展名的文件',
+      '检查服务器是否检查文件内容',
+      '可以尝试修改文件头绕过检测'
     ],
-    codeExample: `// 直接反序列化用户输入
-$data = \$_GET['data'];
-\$obj = unserialize(\$data);
-
-// 使用JSON
-\$data = \$_GET['data'];
-\$obj = json_decode(\$data);
-// 仅访问预期字段
-if (property_exists(\$obj, 'name')) {
-  \$name = \$obj->name;
-}`,
-    flowDiagram: [
-      { title: '代码审计', description: '寻找unserialize点和危险类' },
-      { title: '构造POC', description: '构造恶意序列化字符串' },
-      { title: '触发执行', description: '反序列化时执行魔术方法' },
-      { title: 'RCE成功', description: '获得代码执行能力' }
+    flag: 'Mlai{File-Upload-Success}'
+  },
+  {
+    id: 9,
+    name: 'CSRF-Easy',
+    type: 'csrf',
+    difficulty: 'easy',
+    summary: '学习CSRF攻击的基本原理',
+    tags: ['CSRF', '入门', '跨站请求'],
+    scenario: '网站缺少CSRF防护，可以构造恶意请求',
+    objective: '利用CSRF漏洞执行非授权操作',
+    hints: [
+      '找到敏感操作的接口',
+      '构造恶意链接或表单',
+      '诱导用户点击或访问'
     ],
-    vulnCode: `// 不安全的反序列化
-\$userData = \$_COOKIE['user'];
-\$user = unserialize(\$userData);
-
-// 避免反序列化
-\$userData = \$_COOKIE['user'];
-\$user = json_decode(\$userData);`,
-    checklist: [
-      '避免反序列化用户输入',
-      '使用JSON/XML等数据格式',
-      '禁用危险魔术方法',
-      '升级PHP版本'
-    ]
+    flag: 'Mlai{CSRF-Easy-Success}'
+  },
+  {
+    id: 10,
+    name: 'CSRF-Hard',
+    type: 'csrf',
+    difficulty: 'hard',
+    summary: '学习高级CSRF绕过技术',
+    tags: ['CSRF', '高级', '绕过'],
+    scenario: '网站有基本的CSRF防护，但存在绕过方法',
+    objective: '绕过CSRF防护执行恶意操作',
+    hints: [
+      '分析CSRF Token的生成方式',
+      '尝试获取或伪造Token',
+      '考虑使用XSS配合CSRF'
+    ],
+    flag: 'Mlai{CSRF-Hard-Success}'
+  },
+  {
+    id: 11,
+    name: 'Python反序列化',
+    type: 'deserialization',
+    difficulty: 'hard',
+    summary: '学习Python反序列化漏洞的利用',
+    tags: ['Python', 'pickle', '代码执行'],
+    scenario: '应用程序使用pickle反序列化不可信数据',
+    objective: '构造恶意pickle数据执行代码',
+    hints: [
+      '了解Python pickle模块的工作原理',
+      '构造恶意类或函数',
+      '使用__reduce__方法执行代码'
+    ],
+    flag: 'Mlai{Python-Deserialization-Success}'
   }
 ]
-
-export const difficultyLabels = {
-  easy: '简单',
-  medium: '中等',
-  hard: '困难'
-}
-
-export const difficultyColors = {
-  easy: { bg: '#dcfce7', text: '#166534', border: '#22c55e' },
-  medium: { bg: '#fef3c7', text: '#92400e', border: '#f59e0b' },
-  hard: { bg: '#fee2e2', text: '#991b1b', border: '#ef4444' }
-}

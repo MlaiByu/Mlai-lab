@@ -91,6 +91,10 @@ export const users = {
       method: 'POST',
       body: JSON.stringify(data)
     })
+  },
+
+  getRecentCompletions: () => {
+    return request('/users/recent_completions')
   }
 }
 

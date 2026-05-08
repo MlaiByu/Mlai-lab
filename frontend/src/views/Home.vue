@@ -43,15 +43,43 @@
         </div>
       </div>
     </div>
+
+    <div class="recent-section">
+      <div class="recent-container">
+        <h2 class="section-title">学习动态</h2>
+        <div v-if="allRecentCompletions.length > 0" class="recent-list">
+          <div v-for="item in allRecentCompletions" :key="`${item.user_id}-${item.vulnerability_type}`" class="recent-item">
+            <div class="recent-icon completed">🎉</div>
+            <div class="recent-info">
+              <div class="recent-name">
+                <span class="user-name">{{ item.username }}</span>
+                <span class="completed-text">完成了</span>
+                <span class="exp-name">{{ item.vulnerability_type }}</span>
+              </div>
+              <div class="recent-time">{{ formatTime(item.completed_at) }}</div>
+            </div>
+            <div class="recent-badge">+1</div>
+          </div>
+        </div>
+        <div v-else class="empty-state">
+          <div class="empty-icon">🎯</div>
+          <div class="empty-text">还没有用户完成任何实验</div>
+          <div class="empty-hint">成为第一个完成实验的用户吧！</div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import store from '../store'
 import { vulnerabilities } from '../data/vulnerabilities'
+import { users as usersApi } from '../api'
 
 const totalExperiments = computed(() => vulnerabilities.length)
+
+const allRecentCompletions = ref([])
 
 const getVulnStatus = (type) => {
   if (!store.state.user) return 'pending'
@@ -83,8 +111,43 @@ const pendingExperiments = computed(() =>
   vulnerabilities.filter(v => getVulnStatus(v.name) === 'pending').length
 )
 
+const formatTime = (timeStr) => {
+  if (!timeStr) return '刚刚'
+  
+  try {
+    const date = new Date(timeStr)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    
+    const minutes = Math.floor(diff / 60000)
+    const hours = Math.floor(diff / 3600000)
+    const days = Math.floor(diff / 86400000)
+    
+    if (minutes < 1) return '刚刚'
+    if (minutes < 60) return `${minutes}分钟前`
+    if (hours < 24) return `${hours}小时前`
+    if (days < 7) return `${days}天前`
+    
+    return date.toLocaleDateString('zh-CN')
+  } catch {
+    return timeStr
+  }
+}
+
+const loadRecentCompletions = async () => {
+  try {
+    const response = await usersApi.getRecentCompletions()
+    if (response.success) {
+      allRecentCompletions.value = response.data
+    }
+  } catch (error) {
+    console.error('加载学习动态失败:', error)
+  }
+}
+
 onMounted(() => {
   store.actions.loadExperimentRecords()
+  loadRecentCompletions()
 })
 </script>
 
@@ -211,6 +274,126 @@ onMounted(() => {
   margin-top: 0.25rem;
 }
 
+.recent-section {
+  padding: 3rem 2rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.recent-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.section-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 1.5rem;
+}
+
+.recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.recent-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid rgba(34, 197, 94, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  transition: all 0.2s ease;
+}
+
+.recent-item:hover {
+  transform: translateX(4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.recent-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+
+.recent-icon.completed {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%);
+}
+
+.recent-info {
+  flex: 1;
+}
+
+.recent-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.user-name {
+  color: #0ea5e9;
+  font-weight: 600;
+}
+
+.completed-text {
+  color: #64748b;
+}
+
+.exp-name {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.recent-time {
+  font-size: 0.875rem;
+  color: #94a3b8;
+}
+
+.recent-badge {
+  padding: 0.375rem 0.75rem;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 20px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem 2rem;
+  background: white;
+  border-radius: 16px;
+  border: 1px dashed #e2e8f0;
+}
+
+.empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.empty-text {
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 0.5rem;
+}
+
+.empty-hint {
+  font-size: 0.875rem;
+  color: #94a3b8;
+}
+
 @media (max-width: 768px) {
   .stats-section {
     padding: 2rem 1rem;
@@ -223,6 +406,10 @@ onMounted(() => {
 
   .stat-value {
     font-size: 1.5rem;
+  }
+
+  .recent-section {
+    padding: 2rem 1rem;
   }
 }
 </style>

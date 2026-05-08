@@ -1,6 +1,6 @@
 services:
   web:
-    image: nginx:alpine
+    image: php:7.4-apache
     restart: "no"
     mem_limit: 512m
     memswap_limit: 1g
@@ -14,18 +14,18 @@ services:
     security_opt:
       - no-new-privileges:true
     tmpfs:
-      - /tmp:rw,size=64m,uid=101,gid=101
-      - /var/cache/nginx:rw,size=64m,uid=101,gid=101
-      - /var/run:rw,size=32m,uid=101,gid=101
+      - /tmp:rw,size=64m,uid=33,gid=33
+      - /var/run/apache2:rw,size=64m,uid=33,gid=33
+      - /var/log/apache2:rw,size=32m,uid=33,gid=33
     ports:
       - "${HOST_PORT}:80"
     volumes:
-      - ./www:/usr/share/nginx/html:ro
+      - ./www:/var/www/html:ro
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      test: ["CMD", "curl", "-f", "http://localhost/"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 5s
+      start_period: 10s
     labels:
       - "mlai-lab-vulnerability=true"

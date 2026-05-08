@@ -198,7 +198,11 @@ const getStatusText = (type) => {
 }
 
 const getTargetUrl = () => {
-  if (!currentContainer.value?.host_port) return ''
+  if (!currentContainer.value) return ''
+  if (currentContainer.value.lab_url) {
+    return currentContainer.value.lab_url
+  }
+  if (!currentContainer.value.host_port) return ''
   const port = currentContainer.value.host_port
   const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:'
   const host = window.location.hostname
@@ -322,12 +326,14 @@ const stopEnvironment = async () => {
     if (currentSessionId.value) {
       await experimentApi.endSession(currentSessionId.value, false)
     }
-    await containerApi.remove(
-      currentContainer.value.container_id,
-      store.state.user?.id || 0,
-      selectedChallenge.value?.type || '',
-      currentSessionId.value || ''
-    )
+    if (currentContainer.value.container_id && !currentContainer.value.container_id.startsWith('sqli-lab-')) {
+      await containerApi.remove(
+        currentContainer.value.container_id,
+        store.state.user?.id || 0,
+        selectedChallenge.value?.type || '',
+        currentSessionId.value || ''
+      )
+    }
     currentSessionId.value = ''
     currentContainer.value = null
     await store.actions.loadExperimentRecords()

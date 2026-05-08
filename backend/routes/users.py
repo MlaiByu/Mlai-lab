@@ -55,6 +55,31 @@ def create_user_api():
     create_user(username, password, role)
     return jsonify({"success": True, "message": "用户创建成功"})
 
+@users_bp.route('/api/users/<int:user_id>', methods=['PUT'])
+@teacher_or_admin_required
+def update_user(user_id):
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        role = data.get('role')
+        password = data.get('password')
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        if password and password.strip():
+            cursor.execute("UPDATE users SET username = %s, role = %s, password = %s WHERE id = %s", 
+                          (username, role, hash_password(password), user_id))
+        else:
+            cursor.execute("UPDATE users SET username = %s, role = %s WHERE id = %s", 
+                          (username, role, user_id))
+        
+        conn.commit()
+        conn.close()
+        return jsonify({"success": True, "message": "用户更新成功"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
 @users_bp.route('/api/users/<int:user_id>', methods=['DELETE'])
 @teacher_or_admin_required
 def delete_user(user_id):
@@ -119,6 +144,36 @@ def get_user_profile(user_id):
                 } for s in sessions[:10]]
             }
         })
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+@users_bp.route('/api/users/recent_completions', methods=['GET'])
+def get_recent_completions():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT u.id, u.username, u.role, r.vulnerability_type, r.first_success
+            FROM users u
+            JOIN experiment_records r ON u.id = r.user_id
+            WHERE r.success_count > 0 AND r.first_success IS NOT NULL
+            ORDER BY r.first_success DESC
+            LIMIT 20
+        ''')
+        results = cursor.fetchall()
+        conn.close()
+        
+        completions = []
+        for row in results:
+            completions.append({
+                'user_id': row['id'],
+                'username': row['username'],
+                'role': row['role'],
+                'vulnerability_type': row['vulnerability_type'],
+                'completed_at': row['first_success']
+            })
+        
+        return jsonify({"success": True, "data": completions})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
 
