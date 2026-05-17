@@ -4,7 +4,6 @@ from .experiment import experiment_bp
 from .container import container_bp
 from .health import health_bp
 from .stats import stats_bp
-from .sqli_lab import sqli_lab_bp
 
 def register_routes(app):
     app.register_blueprint(health_bp)
@@ -13,4 +12,3 @@ def register_routes(app):
     app.register_blueprint(experiment_bp)
     app.register_blueprint(container_bp)
     app.register_blueprint(stats_bp)
-    app.register_blueprint(sqli_lab_bp)

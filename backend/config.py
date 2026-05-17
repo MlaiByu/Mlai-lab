@@ -1,60 +1,33 @@
 import os
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'mlai-lab-secret-key'
-    
-    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://Mlai:1234@localhost/mlai_lab'
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-    
+    SERVER_PORT = int(os.environ.get('SERVER_PORT') or 8000)
+
+    DB_HOST = os.environ.get('DB_HOST') or 'localhost'
+    DB_USER = os.environ.get('DB_USER') or 'mlai'
+    DB_PASSWORD = os.environ.get('DB_PASSWORD') or '1234'
+    DB_NAME = os.environ.get('DB_NAME') or 'mlai_lab'
+
     EXPERIMENT_TIMEOUT = 3600
-    
-    DB_HOST = 'localhost'
-    DB_USER = 'Mlai'
-    DB_PASSWORD = '1234'
-    DB_NAME = 'mlai_lab'
-    
+
     CONTAINER_LABEL = 'mlai-lab-vulnerability'
     PORT_MIN = 10000
     PORT_MAX = 13000
-    
+    MAX_CONTAINERS_PER_USER = 1
+
     DOCKER_VULN_MAP = {
-        'SQL注入-入门': 'sqli-easy',
-        'SQL注入-中级': 'sqli-medium',
-        'SQL注入-高级': 'sqli-hard',
-        '反射型XSS': 'xss-reflected',
-        '存储型XSS': 'xss-stored',
-        'DOM型XSS': 'xss-dom',
-        'PHP反序列化': 'php-deserialization',
-        'Python反序列化': 'python-deserialization',
-        '文件上传': 'file-upload',
-        'CSRF-Easy': 'csrf-easy',
-        'CSRF-Hard': 'csrf-hard'
-    }
-    
-    DOCKER_CONFIGS = {
-        'SQL注入-入门': {'use_docker_compose': True, 'port': 80},
-        'SQL注入-中级': {'use_docker_compose': True, 'port': 80},
-        'SQL注入-高级': {'use_docker_compose': True, 'port': 80},
-        '反射型XSS': {'use_docker_compose': True, 'port': 80},
-        '存储型XSS': {'use_docker_compose': True, 'port': 80},
-        'DOM型XSS': {'use_docker_compose': True, 'port': 80},
-        'PHP反序列化': {'use_docker_compose': True, 'port': 80},
-        'Python反序列化': {'use_docker_compose': True, 'port': 8000},
-        '文件上传': {'use_docker_compose': True, 'port': 80},
-        'CSRF-Easy': {'use_docker_compose': True, 'port': 80},
-        'CSRF-Hard': {'use_docker_compose': True, 'port': 80}
+        'SQL Injection Easy': 'sqli-easy',
+        'SQL Injection Medium': 'sqli-medium',
+        'SQL Injection Hard': 'sqli-hard',
+        'XSS Reflected': 'xss-reflected',
+        'XSS Stored': 'xss-stored',
+        'XSS DOM': 'xss-dom',
+        'PHP Deserialization': 'php-deserialization',
+        'Python Deserialization': 'python-deserialization',
+        'File Upload': 'file-upload',
+        'CSRF Easy': 'csrf-easy',
+        'CSRF Hard': 'csrf-hard'
     }
 
-class DevelopmentConfig(Config):
-    DEBUG = True
-
-class ProductionConfig(Config):
-    DEBUG = False
-
-config = {
-    'development': DevelopmentConfig,
-    'production': ProductionConfig,
-    'default': DevelopmentConfig
-}
+    DOCKER_CONFIGS = {name: {'use_docker_compose': True, 'port': 80} for name in DOCKER_VULN_MAP}

@@ -19,3 +19,4 @@ dist/
 .vscode/
 *.egg-info/
 nohup.out
+.npm-cache

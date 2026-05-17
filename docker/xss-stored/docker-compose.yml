@@ -21,10 +21,10 @@ services:
     volumes:
       - ./www:/var/www/html:ro
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/"]
-      interval: 30s
-      timeout: 5s
+      test: ["CMD-SHELL", "curl -f http://localhost/ || exit 1"]
+      interval: 1s
+      timeout: 1s
       retries: 3
-      start_period: 10s
+      start_period: 2s
     labels:
       - "mlai-lab-vulnerability=true"

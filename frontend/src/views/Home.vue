@@ -48,15 +48,15 @@
       <div class="recent-container">
         <h2 class="section-title">学习动态</h2>
         <div v-if="allRecentCompletions.length > 0" class="recent-list">
-          <div v-for="item in allRecentCompletions" :key="`${item.user_id}-${item.vulnerability_type}`" class="recent-item">
+          <div v-for="(item, index) in allRecentCompletions" :key="index" class="recent-item">
             <div class="recent-icon completed">🎉</div>
             <div class="recent-info">
               <div class="recent-name">
                 <span class="user-name">{{ item.username }}</span>
                 <span class="completed-text">完成了</span>
-                <span class="exp-name">{{ item.vulnerability_type }}</span>
+                <span class="exp-name">{{ item.name }}</span>
               </div>
-              <div class="recent-time">{{ formatTime(item.completed_at) }}</div>
+              <div class="recent-time">{{ formatTime(item.first_success) }}</div>
             </div>
             <div class="recent-badge">+1</div>
           </div>
@@ -74,60 +74,63 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import store from '../store'
-import { vulnerabilities } from '../data/vulnerabilities'
 import { users as usersApi } from '../api'
 
-const totalExperiments = computed(() => vulnerabilities.length)
-
 const allRecentCompletions = ref([])
+const vulnerabilities = ref([])
 
-const getVulnStatus = (type) => {
+const loadVulnerabilities = async () => {
+  try {
+    const response = await fetch('/api/experiment/vulnerabilities')
+    const data = await response.json()
+    if (data.success) {
+      vulnerabilities.value = data.vulnerabilities
+    }
+  } catch (error) {
+    console.error('Failed to load vulnerabilities:', error)
+  }
+}
+
+const totalExperiments = computed(() => vulnerabilities.value.length)
+
+const getVulnStatus = (vulnId) => {
   if (!store.state.user) return 'pending'
 
-  const record = store.state.experimentRecords.find(r => r.vulnerability_type === type)
+  const record = store.state.experimentRecords.find(r => r.vulnerability_id === vulnId)
   if (!record) return 'pending'
-  if (record.success_count > 0) return 'completed'
-  if (record.is_expired) return 'pending'
-
-  if (record.start_time) {
-    try {
-      const elapsed = (Date.now() - new Date(record.start_time).getTime()) / 1000
-      if (elapsed < 3600) return 'in_progress'
-    } catch {}
-  }
-
+  if (record.success) return 'completed'
   return 'pending'
 }
 
 const completedExperiments = computed(() =>
-  vulnerabilities.filter(v => getVulnStatus(v.name) === 'completed').length
+  vulnerabilities.value.filter(v => getVulnStatus(v.id) === 'completed').length
 )
 
 const inProgressExperiments = computed(() =>
-  vulnerabilities.filter(v => getVulnStatus(v.name) === 'in_progress').length
+  vulnerabilities.value.filter(v => getVulnStatus(v.id) === 'in_progress').length
 )
 
 const pendingExperiments = computed(() =>
-  vulnerabilities.filter(v => getVulnStatus(v.name) === 'pending').length
+  vulnerabilities.value.filter(v => getVulnStatus(v.id) === 'pending').length
 )
 
 const formatTime = (timeStr) => {
   if (!timeStr) return '刚刚'
-  
+
   try {
     const date = new Date(timeStr)
     const now = new Date()
     const diff = now.getTime() - date.getTime()
-    
+
     const minutes = Math.floor(diff / 60000)
     const hours = Math.floor(diff / 3600000)
     const days = Math.floor(diff / 86400000)
-    
+
     if (minutes < 1) return '刚刚'
     if (minutes < 60) return `${minutes}分钟前`
     if (hours < 24) return `${hours}小时前`
     if (days < 7) return `${days}天前`
-    
+
     return date.toLocaleDateString('zh-CN')
   } catch {
     return timeStr
@@ -145,9 +148,10 @@ const loadRecentCompletions = async () => {
   }
 }
 
-onMounted(() => {
-  store.actions.loadExperimentRecords()
-  loadRecentCompletions()
+onMounted(async () => {
+  await loadVulnerabilities()
+  await store.actions.loadExperimentRecords()
+  await loadRecentCompletions()
 })
 </script>
 
@@ -212,7 +216,7 @@ onMounted(() => {
   max-width: 1200px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 1.5rem;
 }
 
@@ -250,7 +254,7 @@ onMounted(() => {
 }
 
 .stat-icon.in-progress {
-  background: linear-gradient(135deg, rgba(251, 191, 36, 0.1) 0%, rgba(245, 158, 11, 0.1) 100%);
+  background: linear-gradient(135deg, rgba(251, 193, 36, 0.1) 0%, rgba(245, 158, 11, 0.1) 100%);
 }
 
 .stat-icon.pending {

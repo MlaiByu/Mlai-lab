@@ -21,7 +21,7 @@ def get_class_overview():
         for student in students:
             records = get_experiment_records(student['id'])
             attempts = sum(r['attempt_count'] for r in records)
-            success = sum(r['success_count'] for r in records)
+            success = sum(1 for r in records if r['success'] == 1)
             total_attempts += attempts
             total_success += success
             if success > 0:
@@ -56,27 +56,32 @@ def get_vulnerability_stats():
         for student in students:
             records = get_experiment_records(student['id'])
             for record in records:
-                vuln_type = record['vulnerability_type']
-                if vuln_type not in vuln_stats:
-                    vuln_stats[vuln_type] = {
+                vuln_id = record['vulnerability_id']
+                vuln_name = record.get('name', f'vulnerability_{vuln_id}')
+                if vuln_id not in vuln_stats:
+                    vuln_stats[vuln_id] = {
+                        'vulnerability_id': vuln_id,
+                        'vulnerability_name': vuln_name,
                         'total_attempts': 0,
                         'total_success': 0,
                         'attempted_students': 0,
                         'completed_students': 0
                     }
-                vuln_stats[vuln_type]['total_attempts'] += record['attempt_count']
-                vuln_stats[vuln_type]['total_success'] += record['success_count']
+                vuln_stats[vuln_id]['total_attempts'] += record['attempt_count']
+                if record['success'] == 1:
+                    vuln_stats[vuln_id]['total_success'] += 1
                 if record['attempt_count'] > 0:
-                    vuln_stats[vuln_type]['attempted_students'] += 1
-                if record['success_count'] > 0:
-                    vuln_stats[vuln_type]['completed_students'] += 1
+                    vuln_stats[vuln_id]['attempted_students'] += 1
+                if record['success'] == 1:
+                    vuln_stats[vuln_id]['completed_students'] += 1
         
         result = []
-        for vuln_type, stats in vuln_stats.items():
+        for vuln_id, stats in vuln_stats.items():
             completion_rate = round(stats['completed_students'] / stats['attempted_students'] * 100, 1) if stats['attempted_students'] > 0 else 0
             success_rate = round(stats['total_success'] / stats['total_attempts'] * 100, 1) if stats['total_attempts'] > 0 else 0
             result.append({
-                'vulnerability_type': vuln_type,
+                'vulnerability_id': vuln_id,
+                'vulnerability_name': stats['vulnerability_name'],
                 'attempted_students': stats['attempted_students'],
                 'completed_students': stats['completed_students'],
                 'total_attempts': stats['total_attempts'],
@@ -101,7 +106,7 @@ def get_student_ranking():
         for student in students:
             records = get_experiment_records(student['id'])
             total_attempts = sum(r['attempt_count'] for r in records)
-            total_success = sum(r['success_count'] for r in records)
+            total_success = sum(1 for r in records if r['success'] == 1)
             success_rate = round(total_success / total_attempts * 100, 1) if total_attempts > 0 else 0
             
             ranking.append({
@@ -110,7 +115,7 @@ def get_student_ranking():
                 'total_attempts': total_attempts,
                 'total_success': total_success,
                 'success_rate': success_rate,
-                'completed_experiments': len([r for r in records if r['success_count'] > 0])
+                'completed_experiments': len([r for r in records if r['success'] == 1])
             })
         
         ranking.sort(key=lambda x: x['completed_experiments'], reverse=True)
@@ -146,9 +151,9 @@ def export_all_students_scores():
     for student in students:
         records = get_experiment_records(student['id'])
         total_attempts = sum(r['attempt_count'] for r in records)
-        total_success = sum(r['success_count'] for r in records)
+        total_success = sum(1 for r in records if r['success'] == 1)
         success_rate = round(total_success / total_attempts * 100, 1) if total_attempts > 0 else 0
-        completed = len([r for r in records if r['success_count'] > 0])
+        completed = len([r for r in records if r['success'] == 1])
         
         ranking.append({
             'username': student['username'],
@@ -194,8 +199,8 @@ def export_single_student_progress(user_id):
     
     writer.writerow(['学习进度统计', ''])
     total_attempts = sum(r['attempt_count'] for r in records)
-    total_success = sum(r['success_count'] for r in records)
-    completed = len([r for r in records if r['success_count'] > 0])
+    total_success = sum(1 for r in records if r['success'] == 1)
+    completed = len([r for r in records if r['success'] == 1])
     success_rate = round(total_success / total_attempts * 100, 1) if total_attempts > 0 else 0
     
     writer.writerow(['总尝试次数', total_attempts])
@@ -205,30 +210,30 @@ def export_single_student_progress(user_id):
     writer.writerow([])
     
     writer.writerow(['各实验详情', '', '', ''])
-    writer.writerow(['实验类型', '尝试次数', '成功次数', '状态'])
+    writer.writerow(['实验ID', '实验名称', '尝试次数', '状态'])
     
     for record in records:
-        status = '已完成' if record['success_count'] > 0 else '进行中' if record['attempt_count'] > 0 else '未开始'
+        status = '已完成' if record['success'] == 1 else '进行中' if record['attempt_count'] > 0 else '未开始'
         writer.writerow([
-            record['vulnerability_type'],
+            record['vulnerability_id'],
+            record.get('name', ''),
             record['attempt_count'],
-            record['success_count'],
             status
         ])
     
     writer.writerow([])
     writer.writerow(['实验会话记录', '', '', '', '', ''])
-    writer.writerow(['实验类型', '开始时间', '结束时间', '状态', '容器ID', '端口'])
+    writer.writerow(['会话ID', '开始时间', '结束时间', '状态', '容器ID', '端口'])
     
     for session in sessions:
         status = '成功' if session['success'] == 1 else '失败' if session['end_time'] else '进行中'
         writer.writerow([
-            session['vulnerability_type'],
+            session['session_id'],
             session['start_time'],
-            session['end_time'] or '',
+            session.get('end_time', ''),
             status,
-            session.get('container_id', ''),
-            session.get('port', '')
+            session.get('docker_container_id', ''),
+            session.get('server_port', '')
         ])
     
     response = make_response(output.getvalue())
@@ -269,13 +274,12 @@ def get_experiment_logs():
                 'session_id': session['session_id'],
                 'user_id': session['user_id'],
                 'username': session.get('username'),
-                'vulnerability_type': session['vulnerability_type'],
-                'container_id': session.get('container_id'),
-                'port': session.get('port'),
+                'docker_container_id': session.get('docker_container_id'),
+                'server_port': session.get('server_port'),
                 'start_time': session['start_time'],
-                'end_time': session['end_time'],
-                'success': session['success'] == 1,
-                'duration': calculate_duration(session['start_time'], session['end_time'])
+                'end_time': session.get('end_time'),
+                'success': session.get('success') == 1,
+                'duration': calculate_duration(session['start_time'], session.get('end_time'))
             })
         
         return jsonify({"success": True, "data": logs})
@@ -287,8 +291,8 @@ def calculate_duration(start_time, end_time):
         return "进行中"
     try:
         from datetime import datetime
-        start = datetime.strptime(start_time, '%Y-%m-%d %H:%M')
-        end = datetime.strptime(end_time, '%Y-%m-%d %H:%M')
+        start = datetime.strptime(start_time, '%Y-%m-%d %H:%M:%S')
+        end = datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
         diff = end - start
         minutes = diff.total_seconds() // 60
         seconds = diff.total_seconds() % 60
@@ -305,11 +309,10 @@ def get_user_operations(user_id):
         operations = []
         for session in sessions:
             operations.append({
-                'action': '开始实验' if not session['end_time'] else '完成实验',
-                'vulnerability_type': session['vulnerability_type'],
-                'timestamp': session['start_time'] if not session['end_time'] else session['end_time'],
-                'success': session['success'] == 1,
-                'duration': calculate_duration(session['start_time'], session['end_time'])
+                'action': '开始实验' if not session.get('end_time') else '完成实验',
+                'timestamp': session['start_time'] if not session.get('end_time') else session['end_time'],
+                'success': session.get('success') == 1,
+                'duration': calculate_duration(session['start_time'], session.get('end_time'))
             })
         
         return jsonify({"success": True, "data": operations})

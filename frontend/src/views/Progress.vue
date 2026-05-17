@@ -64,22 +64,21 @@
                 <span class="vuln-name">{{ vuln.name }}</span>
                 <el-tag :type="getLevelTagType(vuln.level)" size="small">{{ vuln.levelText }}</el-tag>
               </div>
-              <span :class="['status-badge', getStatus(vuln.type)]">
-                {{ getStatusText(vuln.type) }}
+              <span :class="['status-badge', getStatus(vuln.id)]">
+                {{ getStatusText(vuln.id) }}
               </span>
             </div>
             <div class="progress-bar-wrap">
               <el-progress 
-                :percentage="getStatus(vuln.type) === 'completed' ? 100 : 0" 
+                :percentage="getStatus(vuln.id) === 'completed' ? 100 : 0" 
                 :stroke-width="8"
                 :show-text="false"
-                :stroke-color="getStatus(vuln.type) === 'completed' ? '#22c55e' : '#475569'"
+                :stroke-color="getStatus(vuln.id) === 'completed' ? '#22c55e' : '#475569'"
                 class="mini-progress"
               />
             </div>
-            <div v-if="getRecord(vuln.type)" class="record-info">
-              <span>尝试次数: {{ getRecord(vuln.type).attempt_count || 0 }}</span>
-              <span>成功次数: {{ getRecord(vuln.type).success_count || 0 }}</span>
+            <div v-if="getRecord(vuln.id)" class="record-info">
+              <span>尝试次数: {{ getRecord(vuln.id).attempt_count || 0 }}</span>
             </div>
           </div>
         </div>
@@ -93,21 +92,23 @@ import { ref, computed, onMounted } from 'vue'
 import store from '../store'
 
 const vulnerabilities = ref([
-  { name: 'SQL注入-入门', level: 'low', levelText: '入门', type: 'SQL注入-入门', id: 1 },
-  { name: 'SQL注入-中级', level: 'medium', levelText: '进阶', type: 'SQL注入-中级', id: 2 },
-  { name: 'SQL注入-高级', level: 'high', levelText: '专家', type: 'SQL注入-高级', id: 3 },
-  { name: '反射型XSS', level: 'low', levelText: '入门', type: '反射型XSS', id: 4 },
-  { name: '存储型XSS', level: 'medium', levelText: '进阶', type: '存储型XSS', id: 5 },
-  { name: 'DOM型XSS', level: 'medium', levelText: '进阶', type: 'DOM型XSS', id: 6 },
-  { name: 'PHP反序列化', level: 'high', levelText: '专家', type: 'PHP反序列化', id: 7 },
-  { name: 'Python反序列化', level: 'high', levelText: '专家', type: 'Python反序列化', id: 8 },
-  { name: '文件上传', level: 'medium', levelText: '进阶', type: '文件上传', id: 9 }
+  { name: 'SQL注入-入门', level: 'low', levelText: '入门', id: 1 },
+  { name: 'SQL注入-中级', level: 'medium', levelText: '进阶', id: 2 },
+  { name: 'SQL注入-高级', level: 'high', levelText: '专家', id: 3 },
+  { name: '反射型XSS', level: 'low', levelText: '入门', id: 4 },
+  { name: '存储型XSS', level: 'medium', levelText: '进阶', id: 5 },
+  { name: 'DOM型XSS', level: 'medium', levelText: '进阶', id: 6 },
+  { name: 'PHP反序列化', level: 'high', levelText: '专家', id: 7 },
+  { name: '文件上传', level: 'medium', levelText: '进阶', id: 8 },
+  { name: 'CSRF-Easy', level: 'low', levelText: '入门', id: 9 },
+  { name: 'CSRF-Hard', level: 'high', levelText: '专家', id: 10 },
+  { name: 'Python反序列化', level: 'high', levelText: '专家', id: 11 }
 ])
 
 const totalExperiments = computed(() => vulnerabilities.value.length)
 
 const completedExperiments = computed(() => {
-  return vulnerabilities.value.filter(v => getStatus(v.type) === 'completed').length
+  return vulnerabilities.value.filter(v => getStatus(v.id) === 'completed').length
 })
 
 const progressPercent = computed(() => {
@@ -119,31 +120,20 @@ const totalAttempts = computed(() => {
   return store.state.experimentRecords.reduce((sum, r) => sum + (r.attempt_count || 0), 0)
 })
 
-const getRecord = (type) => {
-  return store.state.experimentRecords.find(r => r.vulnerability_type === type)
+const getRecord = (vulnId) => {
+  return store.state.experimentRecords.find(r => r.vulnerability_id === vulnId)
 }
 
-const getStatus = (type) => {
-  const record = getRecord(type)
+const getStatus = (vulnId) => {
+  const record = getRecord(vulnId)
   if (!record) return 'not_started'
-  if (record.success_count > 0) return 'completed'
-  if (record.start_time) {
-    try {
-      const elapsed = (Date.now() - new Date(record.start_time).getTime()) / 1000
-      const isMarkedExpired = record.is_expired === 1 || record.is_expired === true
-      
-      if (elapsed < 3600 && !isMarkedExpired) {
-        return 'in_progress'
-      }
-    } catch (e) {
-      console.error('解析时间失败:', e)
-    }
-  }
+  if (record.success) return 'completed'
+  if (record.attempt_count > 0) return 'in_progress'
   return 'not_started'
 }
 
-const getStatusText = (type) => {
-  const status = getStatus(type)
+const getStatusText = (vulnId) => {
+  const status = getStatus(vulnId)
   switch (status) {
     case 'not_started': return '未开始'
     case 'in_progress': return '进行中'

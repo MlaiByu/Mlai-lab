@@ -1,11 +1,10 @@
 from flask import Blueprint, request, jsonify
 import jwt
 import datetime
+from config import Config
 from utils.db import get_user_by_username, create_user, hash_password
 
 auth_bp = Blueprint('auth', __name__)
-
-SECRET_KEY = 'mlai-lab-secret-key'
 
 def generate_token(user_id, username, role):
     payload = {
@@ -14,11 +13,11 @@ def generate_token(user_id, username, role):
         'role': role,
         'exp': datetime.datetime.utcnow() + datetime.timedelta(hours=24)
     }
-    return jwt.encode(payload, SECRET_KEY, algorithm='HS256')
+    return jwt.encode(payload, Config.SECRET_KEY, algorithm='HS256')
 
 def verify_token(token):
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        payload = jwt.decode(token, Config.SECRET_KEY, algorithms=['HS256'])
         return payload
     except jwt.ExpiredSignatureError:
         return None
@@ -28,11 +27,17 @@ def verify_token(token):
 @auth_bp.route('/api/auth/register', methods=['POST'])
 def register():
     data = request.get_json()
-    username = data.get('username', '')
+    username = data.get('username', '').strip()
     password = data.get('password', '')
     
     if not username or not password:
         return jsonify({"success": False, "message": "用户名和密码不能为空"})
+    
+    if len(username) < 3 or len(username) > 32:
+        return jsonify({"success": False, "message": "用户名长度必须在3-32个字符之间"})
+    
+    if len(password) < 6:
+        return jsonify({"success": False, "message": "密码长度至少6个字符"})
     
     if get_user_by_username(username):
         return jsonify({"success": False, "message": "用户名已存在"})
@@ -44,8 +49,11 @@ def register():
 @auth_bp.route('/api/auth/login', methods=['POST'])
 def login():
     data = request.get_json()
-    username = data.get('username', '')
+    username = data.get('username', '').strip()
     password = data.get('password', '')
+    
+    if not username or not password:
+        return jsonify({"success": False, "message": "用户名和密码不能为空"})
     
     user = get_user_by_username(username)
     

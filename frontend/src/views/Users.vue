@@ -44,10 +44,12 @@
             </template>
           </el-table-column>
           <el-table-column prop="created_at" label="创建时间" width="180"></el-table-column>
-          <el-table-column label="操作" width="320">
+          <el-table-column label="操作" width="400">
             <template #default="scope">
               <el-button size="small" v-if="scope.row.role === 'student'" @click="viewProgress(scope.row)">查看进度</el-button>
-              <el-button size="small" @click="editUser(scope.row)">编辑</el-button>
+              <el-button size="small" type="primary" @click="changePassword(scope.row)">修改密码</el-button>
+              <el-button size="small" v-if="scope.row.role === 'student'" type="success" @click="promoteUser(scope.row)">提升为教师</el-button>
+              <el-button size="small" v-if="scope.row.role === 'teacher'" type="warning" @click="demoteUser(scope.row)">降为学生</el-button>
               <el-button size="small" type="danger" @click="deleteUser(scope.row)">删除</el-button>
             </template>
           </el-table-column>
@@ -127,7 +129,11 @@
               <el-input v-model="formData.password" type="password" placeholder="请输入密码"></el-input>
             </el-form-item>
             <el-form-item label="角色">
-              <el-select v-model="formData.role" placeholder="请选择角色">
+              <el-select 
+                v-model="formData.role" 
+                placeholder="请选择角色"
+                :disabled="editingUser && editingUser.role === 'admin'"
+              >
                 <el-option label="学生" value="student"></el-option>
                 <el-option label="教师" value="teacher"></el-option>
               </el-select>
@@ -208,18 +214,18 @@ const getCompletionRate = (userId) => {
 const getSelectedUserCompletionRate = () => {
   const userExp = selectedUserExperiments.value
   if (userExp.length === 0) return 0
-  const completedCount = userExp.filter(e => e.success_count > 0).length
+  const completedCount = userExp.filter(e => e.success).length
   return Math.round((completedCount / vulnerabilities.length) * 100)
 }
 
 const getExperimentStatusType = (exp) => {
-  if (exp.success_count > 0) return 'success'
+  if (exp.success) return 'success'
   if (exp.attempt_count > 0) return 'warning'
   return 'info'
 }
 
 const getExperimentStatusText = (exp) => {
-  if (exp.success_count > 0) return '已完成'
+  if (exp.success) return '已完成'
   if (exp.attempt_count > 0) return '进行中'
   return '未开始'
 }
@@ -373,7 +379,38 @@ const deleteUser = async (user) => {
 const saveUser = async () => {
   try {
     if (editingUser.value) {
-      await usersApi.update(editingUser.value.id, formData.value)
+      if (editingUser.value.role === 'admin') {
+        ElMessage.warning('管理员角色不能被修改')
+        return
+      }
+      
+      let needUpdateBasic = formData.value.username !== editingUser.value.username || formData.value.password
+      let roleChanged = formData.value.role !== editingUser.value.role
+      
+      if (roleChanged) {
+        let message = formData.value.role === 'teacher' 
+          ? `确定要将用户 ${editingUser.value.username} 提升为教师吗？`
+          : `确定要将用户 ${editingUser.value.username} 降为学生吗？`
+        let title = formData.value.role === 'teacher' ? '提升确认' : '降级确认'
+        let confirmText = formData.value.role === 'teacher' ? '确定提升' : '确定降级'
+        
+        await ElMessageBox.confirm(message, title, {
+          confirmButtonText: confirmText,
+          cancelButtonText: '取消',
+          type: 'warning'
+        })
+        
+        if (formData.value.role === 'teacher') {
+          await usersApi.promoteToTeacher(editingUser.value.id)
+        } else {
+          await usersApi.demoteToStudent(editingUser.value.id)
+        }
+      }
+      
+      if (needUpdateBasic) {
+        await usersApi.update(editingUser.value.id, formData.value)
+      }
+      
       ElMessage.success('用户更新成功')
     } else {
       await usersApi.create(formData.value)
@@ -382,8 +419,98 @@ const saveUser = async () => {
     closeModal()
     await loadUsers()
   } catch (error) {
-    console.error('保存用户失败:', error)
-    ElMessage.error('保存用户失败: ' + error.message)
+    if (error !== 'cancel') {
+      console.error('保存用户失败:', error)
+      ElMessage.error('保存用户失败: ' + error.message)
+    }
+  }
+}
+
+const changePassword = async (user) => {
+  if (!user || !user.id) return
+  
+  try {
+    const { value: password } = await ElMessageBox.prompt(
+      `请输入用户 ${user.username} 的新密码`,
+      '修改密码',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        inputType: 'password',
+        inputPlaceholder: '请输入新密码'
+      }
+    )
+    
+    if (!password) {
+      ElMessage.warning('密码不能为空')
+      return
+    }
+    
+    await usersApi.changePassword(user.id, { password })
+    ElMessage.success('密码修改成功')
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('修改密码失败:', error)
+      ElMessage.error('修改密码失败: ' + error.message)
+    }
+  }
+}
+
+const promoteUser = async (user) => {
+  if (!user || !user.id) return
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要将用户 ${user.username} 提升为教师吗？`,
+      '提升确认',
+      {
+        confirmButtonText: '确定提升',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    const response = await usersApi.promoteToTeacher(user.id)
+    if (response.success) {
+      ElMessage.success(response.message)
+      await loadUsers()
+    } else {
+      ElMessage.error(response.message || '提升失败')
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('提升用户角色失败:', error)
+      ElMessage.error('提升失败: ' + error.message)
+    }
+  }
+}
+
+const demoteUser = async (user) => {
+  if (!user || !user.id) return
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要将用户 ${user.username} 降为学生吗？`,
+      '降级确认',
+      {
+        confirmButtonText: '确定降级',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    const response = await usersApi.demoteToStudent(user.id)
+    if (response.success) {
+      ElMessage.success(response.message)
+      await loadUsers()
+    } else {
+      ElMessage.error(response.message || '降级失败')
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('降级用户角色失败:', error)
+      ElMessage.error('降级失败: ' + error.message)
+    }
   }
 }
 

@@ -17,3 +17,4 @@ CREATE TABLE flag(
 );
 INSERT INTO flag VALUES
 (1,'Mlai{sqli_hard_double_write_bypass}');
+

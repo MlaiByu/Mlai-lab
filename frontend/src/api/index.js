@@ -62,26 +62,6 @@ export const users = {
     return request('/users/list')
   },
 
-  create: (data) => {
-    return request('/users/create', {
-      method: 'POST',
-      body: JSON.stringify(data)
-    })
-  },
-
-  update: (userId, data) => {
-    return request(`/users/${userId}`, {
-      method: 'PUT',
-      body: JSON.stringify(data)
-    })
-  },
-
-  delete: (userId) => {
-    return request(`/users/${userId}`, {
-      method: 'DELETE'
-    })
-  },
-
   getProfile: (userId) => {
     return request(`/users/profile/${userId}`)
   },
@@ -93,28 +73,27 @@ export const users = {
     })
   },
 
-  getRecentCompletions: () => {
-    return request('/users/recent_completions')
+  promoteToTeacher: (userId) => {
+    return request('/users/promote_to_teacher', {
+      method: 'POST',
+      body: JSON.stringify({ target_user_id: userId })
+    })
+  },
+
+  demoteToStudent: (userId) => {
+    return request('/users/demote_to_student', {
+      method: 'POST',
+      body: JSON.stringify({ target_user_id: userId })
+    })
   }
 }
 
 export const experiment = {
-  start: (userId, vulnerabilityType) => {
+  start: (userId, vulnerabilityId) => {
     return request('/experiment/start', {
       method: 'POST',
-      body: JSON.stringify({ userId, vulnerabilityType })
+      body: JSON.stringify({ user_id: userId, vulnerability_id: vulnerabilityId })
     })
-  },
-
-  complete: (userId, vulnerabilityType) => {
-    return request('/experiment/complete', {
-      method: 'POST',
-      body: JSON.stringify({ userId, vulnerabilityType })
-    })
-  },
-
-  records: (userId) => {
-    return request(`/experiment/records?userId=${userId}`)
   },
 
   submit: (data) => {
@@ -124,41 +103,33 @@ export const experiment = {
     })
   },
 
-  sessions: (userId, vulnerabilityType = '') => {
-    let url = `/experiment/sessions?userId=${userId}`
-    if (vulnerabilityType) {
-      url += `&vulnerabilityType=${encodeURIComponent(vulnerabilityType)}`
-    }
-    return request(url)
-  },
-
   endSession: (sessionId, success = false) => {
     return request('/experiment/end_session', {
       method: 'POST',
-      body: JSON.stringify({ sessionId, success })
+      body: JSON.stringify({ session_id: sessionId, success })
     })
   }
 }
 
 export const container = {
-  create: (vulnerabilityType, userId, sessionId) => {
+  create: (vulnerabilityId, userId, sessionId) => {
     return request('/container/create', {
       method: 'POST',
-      body: JSON.stringify({ vulnerability_type: vulnerabilityType, user_id: userId, session_id: sessionId })
+      body: JSON.stringify({ vulnerability_id: vulnerabilityId, user_id: userId, session_id: sessionId })
     })
   },
   
-  getByVuln: (vulnerabilityType, userId) => {
-    return request('/container/get_by_vuln', {
-      method: 'POST',
-      body: JSON.stringify({ vulnerability_type: vulnerabilityType, user_id: userId })
-    })
+  list: (userId) => {
+    if (userId) {
+      return request(`/container/list?user_id=${userId}`)
+    }
+    return request('/container/list')
   },
   
-  remove: (containerId, userId, vulnerabilityType, sessionId) => {
+  remove: (containerId, userId, vulnerabilityId, sessionId) => {
     return request(`/container/remove/${containerId}`, {
       method: 'POST',
-      body: JSON.stringify({ user_id: userId, vulnerability_type: vulnerabilityType, session_id: sessionId })
+      body: JSON.stringify({ user_id: userId, vulnerability_id: vulnerabilityId, session_id: sessionId })
     })
   }
 }

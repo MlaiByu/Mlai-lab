@@ -2,69 +2,55 @@ from flask import request, jsonify, g
 from functools import wraps
 from routes.auth import verify_token
 
+def _extract_and_verify_token():
+    token = request.headers.get('Authorization')
+    if not token:
+        return None, jsonify({"success": False, "message": "请先登录"}), 401
+    
+    if token.startswith('Bearer '):
+        token = token[7:]
+    
+    payload = verify_token(token)
+    if not payload:
+        return None, jsonify({"success": False, "message": "token无效或已过期"}), 401
+    
+    g.user_id = payload['user_id']
+    g.username = payload['username']
+    g.role = payload['role']
+    return payload, None, None
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        token = request.headers.get('Authorization')
-        if not token:
-            return jsonify({"success": False, "message": "请先登录"}), 401
-        
-        if token.startswith('Bearer '):
-            token = token[7:]
-        
-        payload = verify_token(token)
-        if not payload:
-            return jsonify({"success": False, "message": "token无效或已过期"}), 401
-        
-        g.user_id = payload['user_id']
-        g.username = payload['username']
-        g.role = payload['role']
+        _, error, status = _extract_and_verify_token()
+        if error:
+            return error, status
         return f(*args, **kwargs)
     return decorated_function
 
 def admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        token = request.headers.get('Authorization')
-        if not token:
-            return jsonify({"success": False, "message": "请先登录"}), 401
-        
-        if token.startswith('Bearer '):
-            token = token[7:]
-        
-        payload = verify_token(token)
-        if not payload:
-            return jsonify({"success": False, "message": "token无效或已过期"}), 401
+        payload, error, status = _extract_and_verify_token()
+        if error:
+            return error, status
         
         if payload['role'] != 'admin':
             return jsonify({"success": False, "message": "需要管理员权限"}), 403
         
-        g.user_id = payload['user_id']
-        g.username = payload['username']
-        g.role = payload['role']
         return f(*args, **kwargs)
     return decorated_function
 
 def teacher_or_admin_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        token = request.headers.get('Authorization')
-        if not token:
-            return jsonify({"success": False, "message": "请先登录"}), 401
-        
-        if token.startswith('Bearer '):
-            token = token[7:]
-        
-        payload = verify_token(token)
-        if not payload:
-            return jsonify({"success": False, "message": "token无效或已过期"}), 401
+        payload, error, status = _extract_and_verify_token()
+        if error:
+            return error, status
         
         if payload['role'] not in ['admin', 'teacher']:
             return jsonify({"success": False, "message": "需要教师或管理员权限"}), 403
         
-        g.user_id = payload['user_id']
-        g.username = payload['username']
-        g.role = payload['role']
         return f(*args, **kwargs)
     return decorated_function
 

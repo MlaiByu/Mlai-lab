@@ -1,13 +1,13 @@
-from flask import Blueprint, jsonify, request, g
+from flask import Blueprint, jsonify, request
 from utils.db import get_all_users, get_experiment_records, create_user, get_user_by_username, get_db_connection, hash_password, get_user_by_id, get_experiment_sessions
-from utils.auth import admin_required, teacher_or_admin_required
+from utils.auth import teacher_or_admin_required
 
 users_bp = Blueprint('users', __name__)
 
 def get_record_status(record):
     if record['attempt_count'] == 0:
         return 'not_started'
-    return 'completed' if record['success_count'] > 0 else 'in_progress'
+    return 'completed' if record.get('success', 0) == 1 else 'in_progress'
 
 @users_bp.route('/api/users/list', methods=['GET'])
 @teacher_or_admin_required
@@ -20,80 +20,31 @@ def get_users():
         exp_list = []
         for r in records:
             exp_list.append({
-                'vulnerability_type': r['vulnerability_type'],
+                'vulnerability_id': r['vulnerability_id'],
+                'name': r.get('name', ''),
+                'category': r.get('category', ''),
                 'attempt_count': r['attempt_count'],
-                'success_count': r['success_count'],
+                'success': r.get('success', 0) == 1,
                 'status': get_record_status(r)
             })
+
+        total_attempts = sum(r['attempt_count'] for r in records)
+        total_success = sum(1 for r in records if r.get('success', 0) == 1)
 
         result.append({
             'id': user['id'],
             'username': user['username'],
             'role': user['role'],
+            'score': user.get('score', 0),
             'created_at': user['created_at'],
-            'total_attempts': sum(r['attempt_count'] for r in records),
-            'total_success': sum(r['success_count'] for r in records),
+            'total_attempts': total_attempts,
+            'total_success': total_success,
             'experiments': exp_list
         })
 
     return jsonify({"success": True, "data": result})
 
-@users_bp.route('/api/users/create', methods=['POST'])
-@teacher_or_admin_required
-def create_user_api():
-    data = request.get_json()
-    username = data.get('username', '')
-    password = data.get('password', '')
-    role = data.get('role', 'student')
 
-    if not username or not password:
-        return jsonify({"success": False, "message": "用户名和密码不能为空"})
-
-    if get_user_by_username(username):
-        return jsonify({"success": False, "message": "用户名已存在"})
-
-    create_user(username, password, role)
-    return jsonify({"success": True, "message": "用户创建成功"})
-
-@users_bp.route('/api/users/<int:user_id>', methods=['PUT'])
-@teacher_or_admin_required
-def update_user(user_id):
-    try:
-        data = request.get_json()
-        username = data.get('username')
-        role = data.get('role')
-        password = data.get('password')
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        if password and password.strip():
-            cursor.execute("UPDATE users SET username = %s, role = %s, password = %s WHERE id = %s", 
-                          (username, role, hash_password(password), user_id))
-        else:
-            cursor.execute("UPDATE users SET username = %s, role = %s WHERE id = %s", 
-                          (username, role, user_id))
-        
-        conn.commit()
-        conn.close()
-        return jsonify({"success": True, "message": "用户更新成功"})
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)})
-
-@users_bp.route('/api/users/<int:user_id>', methods=['DELETE'])
-@teacher_or_admin_required
-def delete_user(user_id):
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM experiment_sessions WHERE user_id = %s", (user_id,))
-        cursor.execute("DELETE FROM experiment_records WHERE user_id = %s", (user_id,))
-        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
-        conn.commit()
-        conn.close()
-        return jsonify({"success": True, "message": "用户已删除"})
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)})
 
 @users_bp.route('/api/users/profile/<int:user_id>', methods=['GET'])
 @teacher_or_admin_required
@@ -108,17 +59,17 @@ def get_user_profile(user_id):
 
         exp_details = []
         for record in records:
-            vuln_sessions = [s for s in sessions if s['vulnerability_type'] == record['vulnerability_type']]
             exp_details.append({
-                'vulnerability_type': record['vulnerability_type'],
+                'vulnerability_id': record['vulnerability_id'],
+                'name': record.get('name', ''),
+                'category': record.get('category', ''),
                 'attempt_count': record['attempt_count'],
-                'success_count': record['success_count'],
-                'status': get_record_status(record),
-                'session_count': len(vuln_sessions)
+                'success': record.get('success', 0) == 1,
+                'status': get_record_status(record)
             })
 
         total_attempts = sum(r['attempt_count'] for r in records)
-        total_success = sum(r['success_count'] for r in records)
+        total_success = sum(1 for r in records if r.get('success', 0) == 1)
 
         return jsonify({
             "success": True,
@@ -126,6 +77,7 @@ def get_user_profile(user_id):
                 "id": user['id'],
                 "username": user['username'],
                 "role": user['role'],
+                "score": user.get('score', 0),
                 "created_at": user['created_at'],
                 "statistics": {
                     "total_attempts": total_attempts,
@@ -135,45 +87,14 @@ def get_user_profile(user_id):
                 "experiments": exp_details,
                 "recent_sessions": [{
                     'session_id': s['session_id'],
-                    'vulnerability_type': s['vulnerability_type'],
-                    'container_id': s.get('container_id'),
-                    'port': s.get('port'),
+                    'docker_container_id': s.get('docker_container_id'),
+                    'server_port': s.get('server_port'),
                     'start_time': s['start_time'],
                     'end_time': s['end_time'],
                     'success': s['success'] == 1
                 } for s in sessions[:10]]
             }
         })
-    except Exception as e:
-        return jsonify({"success": False, "message": str(e)})
-
-@users_bp.route('/api/users/recent_completions', methods=['GET'])
-def get_recent_completions():
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT u.id, u.username, u.role, r.vulnerability_type, r.first_success
-            FROM users u
-            JOIN experiment_records r ON u.id = r.user_id
-            WHERE r.success_count > 0 AND r.first_success IS NOT NULL
-            ORDER BY r.first_success DESC
-            LIMIT 20
-        ''')
-        results = cursor.fetchall()
-        conn.close()
-        
-        completions = []
-        for row in results:
-            completions.append({
-                'user_id': row['id'],
-                'username': row['username'],
-                'role': row['role'],
-                'vulnerability_type': row['vulnerability_type'],
-                'completed_at': row['first_success']
-            })
-        
-        return jsonify({"success": True, "data": completions})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})
 
@@ -240,5 +161,38 @@ def promote_to_teacher():
         conn.close()
 
         return jsonify({"success": True, "message": f"用户 {target_user['username']} 已提升为教师"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+
+@users_bp.route('/api/users/demote_to_student', methods=['POST'])
+@teacher_or_admin_required
+def demote_to_student():
+    data = request.get_json()
+    target_user_id = data.get('target_user_id', data.get('targetUserId', 0))
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM users WHERE id = %s", (target_user_id,))
+        target_user = cursor.fetchone()
+        if not target_user:
+            conn.close()
+            return jsonify({"success": False, "message": "目标用户不存在"})
+
+        if target_user['role'] == 'admin':
+            conn.close()
+            return jsonify({"success": False, "message": "管理员角色不能被修改"})
+
+        if target_user['role'] == 'student':
+            conn.close()
+            return jsonify({"success": False, "message": "该用户已是学生角色"})
+
+        cursor.execute("UPDATE users SET role = 'student' WHERE id = %s", (target_user_id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({"success": True, "message": f"用户 {target_user['username']} 已降为学生"})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})

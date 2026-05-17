@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SQL注入靶场 - 登录</title>
+    <title>SQL注入靶场 - 初级</title>
     <style>
         body {
             font-family: Arial, sans-serif;

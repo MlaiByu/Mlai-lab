@@ -6,10 +6,10 @@ from utils.db import (
     get_experiment_records,
     create_experiment_session,
     update_experiment_session,
-    delete_experiment_session,
     get_experiment_sessions,
     get_all_vulnerabilities,
-    get_vulnerability_by_type
+    get_vulnerability_by_id,
+    add_user_score
 )
 import datetime
 import uuid
@@ -20,18 +20,18 @@ experiment_bp = Blueprint('experiment', __name__)
 def start_experiment():
     data = request.get_json()
     user_id = data.get('user_id', data.get('userId', 0))
-    vulnerability_type = data.get('vulnerability_type', data.get('vulnerabilityType', ''))
-    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    vulnerability_id = data.get('vulnerability_id', data.get('vulnerabilityId', 0))
+    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     session_id = str(uuid.uuid4())
-    create_experiment_session(user_id, vulnerability_type, session_id)
+    create_experiment_session(user_id, session_id, vulnerability_id=vulnerability_id)
 
-    record = get_experiment_record(user_id, vulnerability_type)
+    record = get_experiment_record(user_id, vulnerability_id)
     if record:
         new_attempt = record.get('attempt_count', 0) + 1
-        update_experiment_record(user_id, vulnerability_type, attempt_count=new_attempt)
+        update_experiment_record(user_id, vulnerability_id, attempt_count=new_attempt, last_attempt=now)
     else:
-        insert_experiment_record(user_id, vulnerability_type, attempt_count=1, success_count=0)
+        insert_experiment_record(user_id, vulnerability_id, attempt_count=1, success=0)
 
     return jsonify({"success": True, "message": "实验已开始", "startTime": now, "sessionId": session_id})
 
@@ -39,50 +39,32 @@ def start_experiment():
 def complete_experiment():
     data = request.get_json()
     user_id = data.get('user_id', data.get('userId', 0))
-    experiment_key = data.get('experiment_key', data.get('experimentKey', ''))
+    vulnerability_id = data.get('vulnerability_id', data.get('vulnerabilityId', 0))
     session_id = data.get('session_id', data.get('sessionId', None))
-    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    record = get_experiment_record(user_id, experiment_key)
+    record = get_experiment_record(user_id, vulnerability_id)
     if record:
-        new_success_count = record.get('success_count', 0) + 1
-        update_experiment_record(user_id, experiment_key, success_count=new_success_count)
+        if not record.get('success') or record.get('success') == 0:
+            update_experiment_record(user_id, vulnerability_id, success=1, first_success=now)
     else:
-        insert_experiment_record(user_id, experiment_key, attempt_count=1, success_count=1)
+        insert_experiment_record(user_id, vulnerability_id, attempt_count=1, success=1, first_success=now)
 
     if session_id:
         update_experiment_session(session_id, end_time=now, success=1)
 
     return jsonify({"success": True, "message": "实验完成"})
 
-@experiment_bp.route('/api/experiment/records', methods=['GET'])
-def get_experiment_records_route():
-    user_id = request.args.get('userId', 0)
-    records = get_experiment_records(user_id)
-
-    result = []
-    for record in records:
-        status = 'completed' if record.get('success_count', 0) > 0 else 'in_progress' if record.get('attempt_count', 0) > 0 else 'not_started'
-
-        result.append({
-            "vulnerability_type": record['vulnerability_type'],
-            "attempt_count": record.get('attempt_count', 0),
-            "success_count": record.get('success_count', 0),
-            "status": status
-        })
-
-    return jsonify({"success": True, "records": result})
-
 @experiment_bp.route('/api/experiment/submit', methods=['POST'])
 def submit_flag():
     data = request.get_json()
     user_id = data.get('user_id', data.get('userId', 0))
-    vulnerability_type = data.get('vulnerability_type', '')
+    vulnerability_id = data.get('vulnerability_id', data.get('vulnerabilityId', 0))
     flag = data.get('flag', '').strip()
     session_id = data.get('session_id', data.get('sessionId', None))
-    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    vuln = get_vulnerability_by_type(vulnerability_type)
+    vuln = get_vulnerability_by_id(vulnerability_id)
     if not vuln:
         return jsonify({"success": False, "message": "未知的漏洞类型"})
 
@@ -90,64 +72,42 @@ def submit_flag():
     success = flag == expected_flag
 
     if success:
-        record = get_experiment_record(user_id, vulnerability_type)
+        record = get_experiment_record(user_id, vulnerability_id)
+        is_first_success = False
         if session_id:
             update_experiment_session(session_id, end_time=now, success=1)
         if record:
-            new_success_count = record.get('success_count', 0) + 1
-            update_experiment_record(user_id, vulnerability_type, success_count=new_success_count)
+            if not record.get('success') or record.get('success') == 0:
+                update_experiment_record(user_id, vulnerability_id, success=1, first_success=now)
+                is_first_success = True
         else:
-            insert_experiment_record(user_id, vulnerability_type, attempt_count=1, success_count=1)
-        return jsonify({"success": True, "message": "Flag正确！挑战成功！"})
+            insert_experiment_record(user_id, vulnerability_id, attempt_count=1, success=1, first_success=now)
+            is_first_success = True
+        
+        if is_first_success:
+            add_user_score(user_id, 100)
+        
+        return jsonify({"success": True, "message": "Flag正确！挑战成功！" + (" +100分" if is_first_success else "")})
     else:
         return jsonify({"success": False, "message": "Flag错误，请重试"})
-
-@experiment_bp.route('/api/experiment/solution', methods=['GET'])
-def get_solution_route():
-    vuln_type = request.args.get('type', '')
-    vuln = get_vulnerability_by_type(vuln_type)
-    solution = vuln['solution'] if vuln else '暂无解题思路'
-    return jsonify({"success": True, "solution": solution})
 
 @experiment_bp.route('/api/experiment/vulnerabilities', methods=['GET'])
 def get_vulnerabilities_route():
     vulnerabilities = get_all_vulnerabilities()
     result = [{
         "id": vuln['id'],
-        "vulnerability_type": vuln['vulnerability_type'],
-        "description": vuln['description'],
-        "difficulty": vuln['difficulty'],
+        "name": vuln['name'],
         "category": vuln['category']
     } for vuln in vulnerabilities]
 
     return jsonify({"success": True, "vulnerabilities": result})
-
-@experiment_bp.route('/api/experiment/sessions', methods=['GET'])
-def get_experiment_sessions_route():
-    user_id = request.args.get('userId', 0, type=int)
-    vulnerability_type = request.args.get('vulnerabilityType', None)
-    sessions = get_experiment_sessions(user_id, vulnerability_type)
-
-    result = [{
-        "id": session['id'],
-        "session_id": session['session_id'],
-        "vulnerability_type": session['vulnerability_type'],
-        "container_id": session.get('container_id'),
-        "port": session.get('port'),
-        "start_time": session['start_time'],
-        "end_time": session['end_time'],
-        "success": session['success'] == 1,
-        "status": "进行中" if session['end_time'] is None else ("成功" if session['success'] == 1 else "失败")
-    } for session in sessions]
-
-    return jsonify({"success": True, "sessions": result})
 
 @experiment_bp.route('/api/experiment/end_session', methods=['POST'])
 def end_session():
     data = request.get_json()
     session_id = data.get('session_id', data.get('sessionId', ''))
     success = data.get('success', False)
-    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     if not session_id:
         return jsonify({"success": False, "message": "缺少session_id参数"}), 400
