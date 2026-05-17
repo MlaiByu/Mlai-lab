@@ -1,70 +1,71 @@
 <template>
-  <div class="register-container">
-    <div class="register-bg"></div>
-    
-    <el-card class="register-card" shadow="none">
-      <div class="logo-section">
+  <div class="register-page">
+    <el-card class="register-card">
+      <div class="register-header">
+        <el-icon :size="48" class="register-icon"><Plus /></el-icon>
         <h1>用户注册</h1>
         <p>创建您的 Mlai-Lab 账号</p>
       </div>
-      
-      <el-form :model="registerForm" @submit.prevent="handleRegister" class="register-form">
-        <el-form-item label="用户名" label-width="80px">
+
+      <el-form :model="registerForm" class="register-form">
+        <el-form-item prop="username">
           <el-input 
             v-model="registerForm.username" 
             placeholder="请输入用户名"
-            prefix-icon="User"
             size="large"
-            required
-          />
+          >
+            <template #prefix>
+              <el-icon><User /></el-icon>
+            </template>
+          </el-input>
         </el-form-item>
         
-        <el-form-item label="密码" label-width="80px">
+        <el-form-item prop="password">
           <el-input 
             v-model="registerForm.password" 
             type="password" 
             placeholder="请输入密码"
-            prefix-icon="Lock"
             size="large"
-            required
-          />
+            show-password
+          >
+            <template #prefix>
+              <el-icon><Lock /></el-icon>
+            </template>
+          </el-input>
         </el-form-item>
         
-        <el-form-item label="确认密码" label-width="80px">
+        <el-form-item prop="confirmPassword">
           <el-input 
             v-model="registerForm.confirmPassword" 
             type="password" 
             placeholder="请再次输入密码"
-            prefix-icon="Lock"
             size="large"
-            required
-          />
+            show-password
+          >
+            <template #prefix>
+              <el-icon><Lock /></el-icon>
+            </template>
+          </el-input>
         </el-form-item>
         
         <el-form-item>
-          <el-button 
-            type="primary" 
-            class="register-btn"
-            :loading="loading"
-            size="large"
-            @click="handleRegister"
-          >
-            {{ loading ? '注册中...' : '注册' }}
+          <el-button type="primary" class="register-btn" :loading="loading" @click="handleRegister">
+            注册
           </el-button>
         </el-form-item>
+        
+        <div v-if="message" :class="['message-box', messageType]">
+          <div :class="['message-content']">
+            <span v-if="messageType === 'error'" class="error-icon">✕</span>
+            <span v-else class="success-icon">✓</span>
+            <span class="message-text">{{ message }}</span>
+          </div>
+        </div>
       </el-form>
-      
-      <el-alert 
-        v-if="message" 
-        :type="messageType === 'success' ? 'success' : 'error'" 
-        :title="message"
-        show-icon
-        class="message-alert"
-      />
-      
-      <div class="login-link">
+
+      <div class="register-footer">
         <span>已有账号？</span>
-        <el-button type="text" @click="goToLogin" class="login-btn">立即登录</el-button>
+        <router-link to="/" class="login-link">立即登录</router-link>
       </div>
     </el-card>
   </div>
@@ -73,6 +74,8 @@
 <script setup>
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElCard, ElForm, ElFormItem, ElInput, ElButton, ElAlert } from 'element-plus'
+import { Plus, User, Lock } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
@@ -126,103 +129,172 @@ const handleRegister = async () => {
     loading.value = false
   }
 }
-
-const goToLogin = () => {
-  router.push('/')
-}
 </script>
 
 <style scoped>
-.register-container {
+.register-page {
   min-height: 100vh;
   display: flex;
-  justify-content: center;
   align-items: center;
-  padding: 2rem;
-  background: linear-gradient(135deg, #f8fafc 0%, #e8f4f8 50%, #f0fdf4 100%);
+  justify-content: center;
+  background: linear-gradient(135deg, #10b981 0%, #34d399 30%, #6ee7b7 70%, #10b981 100%);
+  padding: 20px;
   position: relative;
   overflow: hidden;
 }
 
-.register-bg {
+.register-page::before {
+  content: '';
   position: absolute;
-  bottom: -30%;
-  left: -10%;
-  width: 500px;
-  height: 500px;
-  background: linear-gradient(135deg, #a7f3d0 0%, #67e8f9 50%, #38bdf8 100%);
+  top: -30%;
+  left: -20%;
+  width: 600px;
+  height: 600px;
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 50%;
-  opacity: 0.1;
   filter: blur(60px);
 }
 
+.register-page::after {
+  content: '';
+  position: absolute;
+  bottom: -30%;
+  right: -20%;
+  width: 500px;
+  height: 500px;
+  background: rgba(16, 185, 129, 0.15);
+  border-radius: 50%;
+  filter: blur(50px);
+}
+
 .register-card {
+  width: 100%;
+  max-width: 440px;
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
   position: relative;
   z-index: 1;
-  border-radius: 24px;
-  padding: 3rem;
-  width: 100%;
-  max-width: 420px;
-  box-shadow: 0 20px 60px rgba(56, 189, 248, 0.15);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  overflow: hidden;
 }
 
-.logo-section {
+.register-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #10b981 0%, #34d399 50%, #6ee7b7 100%);
+}
+
+.register-header {
   text-align: center;
-  margin-bottom: 2.5rem;
+  margin-bottom: 32px;
 }
 
-.logo-section h1 {
-  font-size: 1.8rem;
+.register-icon {
+  color: #52c41a;
+  margin-bottom: 16px;
+}
+
+.register-header h1 {
+  font-size: 28px;
   font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 0.5rem;
+  color: #1a1a1a;
+  margin: 0 0 8px 0;
 }
 
-.logo-section p {
-  color: #94a3b8;
-  font-size: 0.9rem;
+.register-header p {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
 }
 
 .register-form {
-  margin-bottom: 1.25rem;
+  margin-bottom: 16px;
+}
+
+.register-form :deep(.el-input__wrapper) {
+  border-radius: 8px;
+  padding: 4px 11px;
+}
+
+.register-form :deep(.el-input__inner) {
+  font-size: 15px;
+}
+
+.register-form :deep(.el-input__prefix .el-icon) {
+  color: #909399;
 }
 
 .register-btn {
   width: 100%;
-  padding: 1rem;
-  font-size: 1.1rem;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  height: 44px;
+  font-size: 16px;
+  border-radius: 8px;
 }
 
-.message-alert {
-  margin-bottom: 1rem;
+.message-box {
+  margin-top: 16px;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.message-box.error {
+  background-color: #fef0f0;
+  border: 1px solid #ffccc7;
+}
+
+.message-box.success {
+  background-color: #f0f9eb;
+  border: 1px solid #b7eb8f;
+}
+
+.message-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.error-icon {
+  color: #f56c6c;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.success-icon {
+  color: #67c23a;
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.message-text {
+  font-size: 14px;
+}
+
+.message-box.error .message-text {
+  color: #f56c6c;
+}
+
+.message-box.success .message-text {
+  color: #67c23a;
+}
+
+.register-footer {
+  text-align: center;
+  font-size: 14px;
+  color: #666;
 }
 
 .login-link {
-  display: flex;
-  justify-content: center;
-  gap: 0.5rem;
-  color: #64748b;
-  font-size: 0.95rem;
+  color: #1890ff;
+  text-decoration: none;
+  margin-left: 4px;
 }
 
-.login-btn {
-  color: #0ea5e9;
-  font-weight: 500;
-}
-
-.login-btn:hover {
-  color: #0284c7;
-}
-
-:deep(.el-input__wrapper) {
-  border-radius: 14px;
-  background: #f8fafc;
-}
-
-:deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+.login-link:hover {
+  text-decoration: underline;
 }
 </style>

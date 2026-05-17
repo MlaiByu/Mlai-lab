@@ -204,7 +204,17 @@ def _async_remove(container_info):
             try:
                 from utils.db import update_experiment_session
                 now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                update_experiment_session(sid, end_time=now, success=0)
+                from utils.db import get_db_connection
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('SELECT success FROM experiment_sessions WHERE session_id = %s', (sid,))
+                result = cursor.fetchone()
+                conn.close()
+                current_success = result['success'] if result else 0
+                if current_success == 0:
+                    update_experiment_session(sid, end_time=now, success=0)
+                else:
+                    update_experiment_session(sid, end_time=now)
             except Exception as e:
                 print(f"[ERROR] 更新会话失败: {e}")
     
@@ -315,6 +325,13 @@ def create_container():
         # 添加 container_id 字段以兼容前端
         container_info['container_id'] = container_info.get('id')
         
+        # 更新数据库中的session记录
+        try:
+            from utils.db import update_experiment_session
+            update_experiment_session(session_id, docker_container_id=container_info['id'], server_port=container_info['host_port'])
+        except Exception as e:
+            print(f"[ERROR] 更新session容器信息失败: {e}")
+        
         return jsonify(container_info)
     
     except Exception as e:
@@ -350,9 +367,18 @@ def remove_container(container_id):
         
         if session_id:
             try:
-                from utils.db import update_experiment_session
+                from utils.db import update_experiment_session, get_db_connection
                 now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                update_experiment_session(session_id, end_time=now, success=0)
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute('SELECT success FROM experiment_sessions WHERE session_id = %s', (session_id,))
+                result = cursor.fetchone()
+                conn.close()
+                current_success = result['success'] if result else 0
+                if current_success == 0:
+                    update_experiment_session(session_id, end_time=now, success=0)
+                else:
+                    update_experiment_session(session_id, end_time=now)
             except:
                 pass
         
@@ -415,9 +441,54 @@ def get_available_port():
             return selected_port
     return None
 
+def cleanup_dead_sessions():
+    print("[INFO] 正在清理无效的实验会话...")
+    try:
+        from utils.db import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "SELECT id, user_id, vulnerability_id, docker_container_id, session_id FROM experiment_sessions WHERE end_time IS NULL"
+        )
+        sessions = cursor.fetchall()
+        
+        running_container_ids = set()
+        success, stdout, _ = run_docker_command(
+            "docker ps --format '{{.ID}}' 2>/dev/null",
+            timeout=10
+        )
+        if success and stdout.strip():
+            for line in stdout.strip().split('\n'):
+                running_container_ids.add(line[:12])
+        
+        cleaned_count = 0
+        for session in sessions:
+            container_id = session.get('docker_container_id', '')
+            if not container_id or container_id not in running_container_ids:
+                print(f"[CLEANUP] 清理无效会话: id={session['id']}, container_id={container_id}")
+                cursor.execute(
+                    "UPDATE experiment_sessions SET end_time = NOW() WHERE id = %s",
+                    (session['id'],)
+                )
+                cleaned_count += 1
+        
+        conn.commit()
+        conn.close()
+        print(f"[INFO] 共清理 {cleaned_count} 个无效会话")
+    except Exception as e:
+        print(f"[ERROR] 清理无效会话失败: {e}")
+
 def restore_running_containers():
     print("[INFO] 正在从Docker恢复运行中的容器...")
+    
+    cleanup_dead_sessions()
+    
     try:
+        from utils.db import get_db_connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
         success, stdout, _ = run_docker_command(
             "docker ps --format '{{.ID}}|{{.Names}}|{{.Ports}}|{{.Labels}}' 2>/dev/null",
             timeout=10
@@ -430,26 +501,48 @@ def restore_running_containers():
                     container_id = parts[0][:12]
                     container_name = parts[1]
                     ports = parts[2]
-                    labels = parts[3]
                     
                     if container_name.startswith('mlaic_'):
                         port_match = re.search(r':(\d+)->', ports)
                         host_port = int(port_match.group(1)) if port_match else None
+                        
+                        cursor.execute(
+                            "SELECT id, user_id, vulnerability_id, session_id FROM experiment_sessions WHERE docker_container_id = %s AND end_time IS NULL",
+                            (container_id,)
+                        )
+                        session = cursor.fetchone()
+                        
+                        vulnerability_id = session.get('vulnerability_id') if session else None
+                        user_id = session.get('user_id') if session else None
+                        session_id = session.get('session_id') if session else None
+                        
+                        cursor.execute("SELECT name FROM vulnerabilities WHERE id = %s", (vulnerability_id,))
+                        vuln = cursor.fetchone()
+                        vulnerability_name = vuln.get('name') if vuln else container_name
                         
                         container_info = {
                             'id': container_id,
                             'name': container_name,
                             'status': 'running',
                             'host_port': host_port,
-                            'project_name': container_name
+                            'project_name': container_name,
+                            'user_id': user_id,
+                            'vulnerability_id': vulnerability_id,
+                            'vulnerability_name': vulnerability_name,
+                            'session_id': session_id,
+                            'container_id': container_id
                         }
                         
                         with lock:
                             running_containers.append(container_info)
                             if host_port:
                                 used_ports.add(host_port)
+                            if user_id:
+                                user_container_count[user_id] = user_container_count.get(user_id, 0) + 1
                         restored_count += 1
+                        print(f"[RESTORE] 恢复容器: {container_id}, user={user_id}, vuln={vulnerability_id}")
         
+        conn.close()
         print(f"[INFO] 共恢复 {restored_count} 个容器")
     except Exception as e:
         print(f"[ERROR] 恢复容器失败: {e}")

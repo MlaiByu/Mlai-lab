@@ -155,6 +155,9 @@
                 echo '<div class="result error">SQL执行失败: ' . mysqli_error($conn) . '</div>';
             } elseif ($row = mysqli_fetch_array($result)) {
                 echo '<div class="result success">登录成功！欢迎, ' . htmlspecialchars($row['username']) . '！</div>';
+                if (isset($row['password']) && strpos($row['password'], 'Mlai') !== false) {
+                    echo '<div class="result success">🎉 恭喜！获取到Flag: ' . htmlspecialchars($row['password']) . '</div>';
+                }
             } else {
                 echo '<div class="result error">登录失败，用户名或密码错误</div>';
             }

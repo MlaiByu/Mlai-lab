@@ -1,35 +1,57 @@
-from flask import Blueprint, jsonify, request
-from utils.db import get_all_users, get_experiment_records, create_user, get_user_by_username, get_db_connection, hash_password, get_user_by_id, get_experiment_sessions
-from utils.auth import teacher_or_admin_required
+from flask import Blueprint, jsonify, request, g
+from utils.db import get_all_users, get_experiment_records, create_user, get_user_by_username, get_db_connection, get_user_by_id, get_experiment_sessions, get_all_vulnerabilities, hash_password
+from utils.auth import teacher_or_admin_required, login_required
 
 users_bp = Blueprint('users', __name__)
 
-def get_record_status(record):
-    if record['attempt_count'] == 0:
+def get_record_status(record, running_sessions):
+    if not record or record['attempt_count'] == 0:
+        if running_sessions:
+            return 'in_progress'
         return 'not_started'
-    return 'completed' if record.get('success', 0) == 1 else 'in_progress'
+    if record.get('success', 0) >= 1:
+        return 'completed'
+    if running_sessions:
+        return 'in_progress'
+    return 'attempted'
+
+def get_running_sessions_for_user(user_id):
+    sessions = get_experiment_sessions(user_id)
+    running = {}
+    for s in sessions:
+        if s.get('end_time') is None and s.get('docker_container_id'):
+            vuln_id = s.get('vulnerability_id')
+            if vuln_id:
+                running[vuln_id] = s
+    return running
 
 @users_bp.route('/api/users/list', methods=['GET'])
 @teacher_or_admin_required
 def get_users():
     users = get_all_users()
+    vulnerabilities = get_all_vulnerabilities()
     result = []
     for user in users:
-        records = get_experiment_records(user['id'])
+        records_dict = {r['vulnerability_id']: r for r in get_experiment_records(user['id'])}
+        running_sessions = get_running_sessions_for_user(user['id'])
 
         exp_list = []
-        for r in records:
-            exp_list.append({
-                'vulnerability_id': r['vulnerability_id'],
-                'name': r.get('name', ''),
-                'category': r.get('category', ''),
-                'attempt_count': r['attempt_count'],
-                'success': r.get('success', 0) == 1,
-                'status': get_record_status(r)
-            })
+        for v in vulnerabilities:
+            record = records_dict.get(v['id'])
+            is_running = v['id'] in running_sessions
+            exp_dict = {
+                'vulnerability_id': v['id'],
+                'name': v['name'],
+                'category': v['category'],
+                'attempt_count': record['attempt_count'] if record else 0,
+                'success_count': record.get('success', 0) if record else 0,
+                'success': record.get('success', 0) >= 1 if record else False,
+                'status': get_record_status(record, is_running)
+            }
+            exp_list.append(exp_dict)
 
-        total_attempts = sum(r['attempt_count'] for r in records)
-        total_success = sum(1 for r in records if r.get('success', 0) == 1)
+        total_attempts = sum(e['attempt_count'] for e in exp_list)
+        total_success = sum(1 for e in exp_list if e['success'])
 
         result.append({
             'id': user['id'],
@@ -45,31 +67,40 @@ def get_users():
     return jsonify({"success": True, "data": result})
 
 
-
 @users_bp.route('/api/users/profile/<int:user_id>', methods=['GET'])
-@teacher_or_admin_required
+@login_required
 def get_user_profile(user_id):
     try:
+        if g.user_id != user_id and g.role not in ['admin', 'teacher']:
+            return jsonify({"success": False, "message": "权限不足"}), 403
+            
         user = get_user_by_id(user_id)
         if not user:
             return jsonify({"success": False, "message": "用户不存在"})
 
-        records = get_experiment_records(user_id)
+        vulnerabilities = get_all_vulnerabilities()
+        records_dict = {r['vulnerability_id']: r for r in get_experiment_records(user_id)}
         sessions = get_experiment_sessions(user_id)
+        running_sessions = get_running_sessions_for_user(user_id)
 
         exp_details = []
-        for record in records:
+        for v in vulnerabilities:
+            record = records_dict.get(v['id'])
+            is_running = v['id'] in running_sessions
             exp_details.append({
-                'vulnerability_id': record['vulnerability_id'],
-                'name': record.get('name', ''),
-                'category': record.get('category', ''),
-                'attempt_count': record['attempt_count'],
-                'success': record.get('success', 0) == 1,
-                'status': get_record_status(record)
+                'vulnerability_id': v['id'],
+                'vulnerability_type': v['name'],
+                'category': v['category'],
+                'attempt_count': record['attempt_count'] if record else 0,
+                'success_count': record.get('success', 0) if record else 0,
+                'success': record.get('success', 0) >= 1 if record else False,
+                'status': get_record_status(record, is_running),
+                'last_attempt': record.get('first_success', '') if record else ''
             })
 
-        total_attempts = sum(r['attempt_count'] for r in records)
-        total_success = sum(1 for r in records if r.get('success', 0) == 1)
+        total_attempts = sum(e['attempt_count'] for e in exp_details)
+        total_success = sum(1 for e in exp_details if e['success'])
+        total_vulns = len(vulnerabilities)
 
         return jsonify({
             "success": True,
@@ -82,7 +113,7 @@ def get_user_profile(user_id):
                 "statistics": {
                     "total_attempts": total_attempts,
                     "total_success": total_success,
-                    "completion_rate": round(total_success / len(records) * 100, 1) if records else 0
+                    "completion_rate": round(total_success / total_vulns * 100, 1) if total_vulns > 0 else 0
                 },
                 "experiments": exp_details,
                 "recent_sessions": [{
@@ -99,31 +130,23 @@ def get_user_profile(user_id):
         return jsonify({"success": False, "message": str(e)})
 
 @users_bp.route('/api/users/change_password/<int:user_id>', methods=['POST'])
+@teacher_or_admin_required
 def change_password(user_id):
-    token = request.headers.get('Authorization')
-    if not token:
-        return jsonify({"success": False, "message": "请先登录"}), 401
-
     data = request.get_json()
-    old_password = data.get('old_password', '')
-    new_password = data.get('new_password', '')
+    new_password = data.get('password', data.get('new_password', ''))
 
-    if not old_password or not new_password:
+    if not new_password:
         return jsonify({"success": False, "message": "密码不能为空"})
 
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT password FROM users WHERE id = %s", (user_id,))
+        cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
         result = cursor.fetchone()
 
         if not result:
             conn.close()
             return jsonify({"success": False, "message": "用户不存在"})
-
-        if hash_password(old_password) != result['password']:
-            conn.close()
-            return jsonify({"success": False, "message": "旧密码错误"})
 
         cursor.execute("UPDATE users SET password = %s WHERE id = %s", (hash_password(new_password), user_id))
         conn.commit()
@@ -194,5 +217,34 @@ def demote_to_student():
         conn.close()
 
         return jsonify({"success": True, "message": f"用户 {target_user['username']} 已降为学生"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+@users_bp.route('/api/users/recent_completions', methods=['GET'])
+def get_recent_completions():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT r.user_id, u.username, r.vulnerability_id, r.first_success, v.name
+            FROM experiment_records r
+            JOIN users u ON r.user_id = u.id
+            LEFT JOIN vulnerabilities v ON r.vulnerability_id = v.id
+            WHERE r.success >= 1 AND r.first_success IS NOT NULL
+            ORDER BY r.first_success DESC
+            LIMIT 10
+        """)
+        results = cursor.fetchall()
+        conn.close()
+
+        recent_completions = [{
+            'user_id': r['user_id'],
+            'username': r['username'],
+            'vulnerability_id': r['vulnerability_id'],
+            'name': r.get('name', ''),
+            'first_success': r['first_success']
+        } for r in results]
+
+        return jsonify({"success": True, "data": recent_completions})
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})

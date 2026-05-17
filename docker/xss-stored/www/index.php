@@ -13,19 +13,19 @@
     </style>
     <script>
         function showFlag() {
-            alert('🎉 Flag获取成功！\n\nMlai{XSS-Stored-Success}');
+            alert('🎉 Flag获取成功！\n\nMlai{xss_stored_flag}');
         }
     </script>
 </head>
 <body>
     <div class="container">
         <h1>📝 XSS测试 - 存储型</h1>
-        
+
         <form method="POST">
             <textarea name="msg" placeholder="输入留言"></textarea>
             <button type="submit">提交留言</button>
         </form>
-        
+
         <div class="messages">
             <strong>留言列表：</strong>
             <div>

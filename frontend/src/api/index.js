@@ -12,7 +12,16 @@ const getAuthToken = () => {
   return null
 }
 
-const request = async (url, options = {}) => {
+const fetchWithTimeout = (url, options = {}, timeout = 10000) => {
+  return Promise.race([
+    fetch(url, options),
+    new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('请求超时')), timeout)
+    )
+  ])
+}
+
+const request = async (url, options = {}, retryCount = 0, maxRetries = 2) => {
   const token = getAuthToken()
   
   const defaultOptions = {
@@ -25,7 +34,7 @@ const request = async (url, options = {}) => {
   }
 
   try {
-    const response = await fetch(`${BASE_URL}${url}`, defaultOptions)
+    const response = await fetchWithTimeout(`${BASE_URL}${url}`, defaultOptions)
     
     if (!response.ok) {
       if (response.status === 401) {
@@ -41,7 +50,11 @@ const request = async (url, options = {}) => {
     const data = await response.json()
     return data
   } catch (error) {
-    if (error.message.includes('Failed to fetch')) {
+    if (error.message.includes('Failed to fetch') || error.message.includes('请求超时')) {
+      if (retryCount < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, 300 * (retryCount + 1)))
+        return request(url, options, retryCount + 1, maxRetries)
+      }
       throw new Error('网络连接失败，请检查网络')
     }
     throw error
@@ -85,6 +98,10 @@ export const users = {
       method: 'POST',
       body: JSON.stringify({ target_user_id: userId })
     })
+  },
+
+  getRecentCompletions: () => {
+    return request('/users/recent_completions')
   }
 }
 
@@ -103,10 +120,21 @@ export const experiment = {
     })
   },
 
-  endSession: (sessionId, success = false) => {
+  endSession: (sessionId, success = false, userId = 0, vulnerabilityId = 0) => {
     return request('/experiment/end_session', {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId, success })
+      body: JSON.stringify({ session_id: sessionId, success, user_id: userId, vulnerability_id: vulnerabilityId })
+    })
+  },
+
+  records: (userId) => {
+    return request(`/experiment/records/${userId}`)
+  },
+
+  complete: (userId, vulnerabilityId) => {
+    return request('/experiment/complete', {
+      method: 'POST',
+      body: JSON.stringify({ user_id: userId, vulnerability_id: vulnerabilityId })
     })
   }
 }

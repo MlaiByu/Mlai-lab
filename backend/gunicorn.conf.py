@@ -19,8 +19,8 @@ keepalive = 60
 # 进程管理 - 防止内存泄漏
 max_requests = 500
 max_requests_jitter = 50
-preload_app = True
-reload = False
+preload_app = False
+reload = True
 
 # 日志配置
 log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'log')

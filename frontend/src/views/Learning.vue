@@ -129,6 +129,21 @@
             </div>
           </div>
 
+          <div class="modal-section collapsible">
+            <div class="collapsible-header" @click="toggleSolution">
+              <h3>解题思路</h3>
+              <span :class="['collapse-icon', { rotated: showSolution }]">▼</span>
+            </div>
+            <div v-show="showSolution" class="collapsible-content">
+              <div class="solution-list">
+                <div v-for="(step, index) in selectedVuln?.solution" :key="index" class="solution-item">
+                  <span class="step-num">{{ index + 1 }}</span>
+                  <span class="step-text">{{ step }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="modal-section">
             <h3>实验信息</h3>
             <div class="practice-info">
@@ -160,6 +175,7 @@ import { categories, vulnTypes, vulnerabilities } from '../data/vulnerabilities.
 const selectedCategory = ref('all')
 const selectedVuln = ref(null)
 const showDetailModal = ref(false)
+const showSolution = ref(false)
 
 const filteredVulnerabilities = computed(() => {
   if (selectedCategory.value === 'all') {
@@ -185,6 +201,11 @@ const openVulnDetail = (vuln) => {
 const closeDetailModal = () => {
   showDetailModal.value = false
   selectedVuln.value = null
+  showSolution.value = false
+}
+
+const toggleSolution = () => {
+  showSolution.value = !showSolution.value
 }
 
 const getDifficultyClass = (difficulty) => {
@@ -292,6 +313,10 @@ const getDifficultyLabel = (difficulty) => {
 
 .content-area {
   flex: 1;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  padding: 24px;
+  min-height: 500px;
 }
 
 .vulnerabilities-grid {
@@ -483,6 +508,59 @@ const getDifficultyLabel = (difficulty) => {
   margin-bottom: 0;
 }
 
+.collapsible {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+}
+
+.collapsible-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.collapsible-header:hover {
+  background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%);
+}
+
+.collapsible-header h3 {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.collapse-icon {
+  font-size: 12px;
+  color: #667eea;
+  transition: transform 0.3s ease;
+}
+
+.collapse-icon.rotated {
+  transform: rotate(180deg);
+}
+
+.collapsible-content {
+  padding: 20px;
+  background: white;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+  }
+}
+
 .modal-section h3 {
   font-size: 17px;
   margin: 0 0 15px 0;
@@ -649,6 +727,40 @@ const getDifficultyLabel = (difficulty) => {
   font-size: 14px;
   color: #555;
   border-left: 4px solid #3b82f6;
+}
+
+.solution-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.solution-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  color: white;
+}
+
+.step-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: bold;
+  margin-right: 14px;
+  flex-shrink: 0;
+}
+
+.step-text {
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .practice-info {

@@ -13,22 +13,22 @@
     </style>
     <script>
         function showFlag() {
-            alert('🎉 Flag获取成功！\n\nMlai{XSS-Reflected-Success}');
+            alert('🎉 Flag获取成功！\n\nMlai{xss_reflected_flag}');
         }
     </script>
 </head>
 <body>
     <div class="container">
         <h1>🔍 XSS测试 - 反射型</h1>
-        
+
         <form method="POST">
             <input type="text" name="x" placeholder="输入内容" size="60">
             <button type="submit">提交测试</button>
         </form>
-        
+
         <div class="output">
             <strong>输出结果：</strong>
-            <?php 
+            <?php
             $input = '';
             if(isset($_POST['x'])) {
                 $input = $_POST['x'];

@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { experiment as experimentApi, container as containerApi } from '../api'
+import { experiment as experimentApi, container as containerApi, users as usersApi } from '../api'
 
 const state = reactive({
   user: null,
@@ -58,7 +58,7 @@ const actions = {
     mutations.clearAll()
   },
 
-  loadExperimentRecords: async () => {
+  loadExperimentRecords: async (retryCount = 0) => {
     if (!state.user?.id) return
     try {
       const response = await experimentApi.records(state.user.id)
@@ -68,7 +68,13 @@ const actions = {
       await actions.loadRunningContainers()
       return response
     } catch (error) {
-      console.error('Failed to load experiment records:', error)
+      if (retryCount < 3) {
+        setTimeout(() => {
+          actions.loadExperimentRecords(retryCount + 1)
+        }, 500 * (retryCount + 1))
+      } else {
+        console.warn('加载实验记录失败（已重试3次）:', error.message)
+      }
     }
   },
 
@@ -124,7 +130,22 @@ const actions = {
 
   isExperimentCompleted: (vulnerabilityId) => {
     const record = actions.checkExperimentStatus(vulnerabilityId)
-    return record?.success === true
+    return record?.success >= 1 || record?.success === true
+  },
+
+  refreshUserProfile: async () => {
+    if (!state.user?.id) return
+    try {
+      const response = await usersApi.getProfile(state.user.id)
+      if (response.success && response.data) {
+        const userData = response.data
+        const currentUser = state.user
+        currentUser.score = userData.score || currentUser.score
+        mutations.setUser(currentUser)
+      }
+    } catch (error) {
+      console.warn('刷新用户信息失败:', error.message)
+    }
   }
 }
 

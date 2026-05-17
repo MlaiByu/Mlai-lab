@@ -71,7 +71,8 @@ def login():
                 "id": user['id'],
                 "username": user['username'],
                 "role": user['role'],
-                "token": token
+                "token": token,
+                "score": user['score'] if 'score' in user else 0
             }
         })
     else:

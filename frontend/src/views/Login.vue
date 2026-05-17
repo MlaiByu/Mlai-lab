@@ -1,71 +1,68 @@
 <template>
-  <div class="login-wrapper">
-    <div class="login-container">
-      <div class="login-bg"></div>
-      
-      <el-card class="login-card" shadow="none">
-        <div class="logo-section">
-          <div class="logo-icon">🛡️</div>
-          <h1>欢迎来到 Mlai-Lab</h1>
-          <p>Web安全漏洞测试平台</p>
+  <div class="login-page">
+    <el-card class="login-card">
+      <div class="login-header">
+        <el-icon :size="48" class="login-icon"><Lock /></el-icon>
+        <h1>Mlai-Lab</h1>
+        <p>Web安全漏洞测试平台</p>
+      </div>
+
+      <el-form :model="loginForm" class="login-form">
+        <el-form-item prop="username">
+          <el-input 
+            v-model="loginForm.username" 
+            placeholder="请输入用户名"
+            autocomplete="username"
+            size="large"
+          >
+            <template #prefix>
+              <el-icon><User /></el-icon>
+            </template>
+          </el-input>
+        </el-form-item>
+        
+        <el-form-item prop="password">
+          <el-input 
+            v-model="loginForm.password" 
+            type="password" 
+            placeholder="请输入密码"
+            autocomplete="current-password"
+            size="large"
+            show-password
+          >
+            <template #prefix>
+              <el-icon><Lock /></el-icon>
+            </template>
+          </el-input>
+        </el-form-item>
+        
+        <el-form-item>
+          <el-button type="primary" class="login-btn" :loading="loading" @click="handleLogin">
+            登录
+          </el-button>
+        </el-form-item>
+        
+        <div v-if="errorMessage" class="message-box error">
+          <div class="message-content">
+            <span class="error-icon">✕</span>
+            <span class="message-text">{{ errorMessage }}</span>
+          </div>
         </div>
-        
-        <el-form :model="loginForm" @submit.prevent="handleLogin" class="login-form">
-          <el-form-item>
-            <el-input 
-              v-model="loginForm.username" 
-              placeholder="用户名"
-              prefix-icon="User"
-              size="large"
-              required
-            />
-          </el-form-item>
-          
-          <el-form-item>
-            <el-input 
-              v-model="loginForm.password" 
-              type="password" 
-              placeholder="密码"
-              prefix-icon="Lock"
-              size="large"
-              required
-            />
-          </el-form-item>
-          
-          <el-form-item>
-            <el-button 
-              type="primary" 
-              class="login-btn"
-              :loading="loading"
-              size="large"
-              @click="handleLogin"
-            >
-              {{ loading ? '登录中...' : '登录' }}
-            </el-button>
-          </el-form-item>
-        </el-form>
-        
-        <el-alert 
-          v-if="errorMessage" 
-          type="error" 
-          :title="errorMessage"
-          show-icon
-          class="error-alert"
-        />
-        
-        <div class="register-link">
-          <span>还没有账号？</span>
-          <el-button type="text" @click="goToRegister" class="register-btn">立即注册</el-button>
-        </div>
-        
-      </el-card>
-    </div>
+      </el-form>
+
+      <div class="login-footer">
+        <span>还没有账号？</span>
+        <router-link to="/register" class="register-link">立即注册</router-link>
+      </div>
+    </el-card>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElCard, ElForm, ElFormItem, ElInput, ElButton, ElAlert } from 'element-plus'
+import { Lock, User } from '@element-plus/icons-vue'
 import store from '../store'
 
 const router = useRouter()
@@ -93,12 +90,29 @@ const handleLogin = async () => {
     const data = await response.json()
     
     if (data.success) {
-      const user = { 
+      let user = { 
         id: data.user.id,
         username: data.user.username,
         role: data.user.role,
-        token: data.user.token
+        token: data.user.token,
+        score: data.user.score || 0
       }
+      
+      try {
+        const profileResponse = await fetch('/api/users/profile/' + user.id, {
+          headers: {
+            'Authorization': 'Bearer ' + user.token,
+            'Content-Type': 'application/json'
+          }
+        })
+        const profileData = await profileResponse.json()
+        if (profileData.success && profileData.data && profileData.data.score !== undefined) {
+          user.score = profileData.data.score
+        }
+      } catch (e) {
+        console.warn('无法获取用户分数:', e)
+      }
+      
       localStorage.setItem('user', JSON.stringify(user))
       store.mutations.setUser(user)
       await store.actions.loadExperimentRecords()
@@ -112,132 +126,166 @@ const handleLogin = async () => {
     loading.value = false
   }
 }
-
-const goToRegister = () => {
-  router.push('/register')
-}
 </script>
 
 <style scoped>
-.login-wrapper {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 30%, #a855f7 70%, #6366f1 100%);
+  padding: 20px;
+  position: relative;
   overflow: hidden;
 }
 
-.login-container {
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 30px 20px;
-  background: linear-gradient(135deg, #f8fafc 0%, #e8f4f8 50%, #f0fdf4 100%);
-  position: relative;
-}
-
-.login-bg {
+.login-page::before {
+  content: '';
   position: absolute;
   top: -30%;
-  right: -10%;
-  width: 500px;
-  height: 500px;
-  background: linear-gradient(135deg, #38bdf8 0%, #22d3ee 50%, #14b8a6 100%);
+  left: -20%;
+  width: 600px;
+  height: 600px;
+  background: rgba(255, 255, 255, 0.08);
   border-radius: 50%;
-  opacity: 0.1;
   filter: blur(60px);
 }
 
+.login-page::after {
+  content: '';
+  position: absolute;
+  bottom: -30%;
+  right: -20%;
+  width: 500px;
+  height: 500px;
+  background: rgba(168, 85, 247, 0.15);
+  border-radius: 50%;
+  filter: blur(50px);
+}
+
 .login-card {
+  width: 100%;
+  max-width: 440px;
+  border-radius: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
   position: relative;
   z-index: 1;
-  border-radius: 24px;
-  padding: 3rem;
-  width: 100%;
-  max-width: 420px;
-  box-shadow: 0 20px 60px rgba(56, 189, 248, 0.15);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  overflow: hidden;
 }
 
-.logo-section {
+.login-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
+}
+
+.login-header {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 32px;
 }
 
-.logo-icon {
-  font-size: 3.5rem;
-  margin-bottom: 1rem;
-  animation: bounce 2s ease-in-out infinite;
+.login-icon {
+  color: #1890ff;
+  margin-bottom: 16px;
 }
 
-@keyframes bounce {
-  0%, 100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-8px);
-  }
-}
-
-.logo-section h1 {
-  font-size: 1.8rem;
+.login-header h1 {
+  font-size: 28px;
   font-weight: 700;
-  background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin-bottom: 0.5rem;
+  color: #1a1a1a;
+  margin: 0 0 8px 0;
 }
 
-.logo-section p {
-  color: #94a3b8;
-  font-size: 0.9rem;
+.login-header p {
+  font-size: 14px;
+  color: #666;
+  margin: 0;
 }
 
 .login-form {
-  margin-bottom: 1.25rem;
+  margin-bottom: 16px;
+}
+
+.login-form :deep(.el-input__wrapper) {
+  border-radius: 8px;
+  padding: 4px 11px;
+}
+
+.login-form :deep(.el-input__inner) {
+  font-size: 15px;
+}
+
+.login-form :deep(.el-input__prefix .el-icon) {
+  color: #909399;
 }
 
 .login-btn {
   width: 100%;
-  padding: 1rem;
-  font-size: 1.1rem;
-  font-weight: 600;
-  letter-spacing: 0.5px;
+  height: 44px;
+  font-size: 16px;
+  border-radius: 8px;
 }
 
-.error-alert {
-  margin-bottom: 1rem;
+.message-box {
+  margin-top: 16px;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+
+.message-box.error {
+  background-color: #fff2f0;
+  border: 1px solid #ffccc7;
+}
+
+.message-box.success {
+  background-color: #f6ffed;
+  border: 1px solid #b7eb8f;
+}
+
+.message-content {
+  display: flex;
+  align-items: center;
+}
+
+.error-icon {
+  color: #ff4d4f;
+  font-size: 14px;
+  font-weight: bold;
+  margin-right: 8px;
+}
+
+.success-icon {
+  color: #52c41a;
+  font-size: 14px;
+  font-weight: bold;
+  margin-right: 8px;
+}
+
+.message-text {
+  font-size: 14px;
+  color: #ff4d4f;
+}
+
+.login-footer {
+  text-align: center;
+  font-size: 14px;
+  color: #666;
 }
 
 .register-link {
-  display: flex;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-  color: #64748b;
-  font-size: 0.95rem;
+  color: #1890ff;
+  text-decoration: none;
+  margin-left: 4px;
 }
 
-.register-btn {
-  color: #0ea5e9;
-  font-weight: 500;
-}
-
-.register-btn:hover {
-  color: #0284c7;
-}
-
-
-
-:deep(.el-input__wrapper) {
-  border-radius: 14px;
-  background: #f8fafc;
-}
-
-:deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+.register-link:hover {
+  text-decoration: underline;
 }
 </style>

@@ -6,6 +6,7 @@ import Vulnerabilities from '../views/Vulnerabilities.vue'
 import Users from '../views/Users.vue'
 import Progress from '../views/Progress.vue'
 import Learning from '../views/Learning.vue'
+import MainLayout from '../layouts/MainLayout.vue'
 
 const routes = [
   {
@@ -24,34 +25,36 @@ const routes = [
     component: Register
   },
   {
-    path: '/home',
-    name: 'Home',
-    component: Home,
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/vulnerabilities',
-    name: 'Vulnerabilities',
-    component: Vulnerabilities,
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/learning',
-    name: 'Learning',
-    component: Learning,
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/users',
-    name: 'Users',
-    component: Users,
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/progress',
-    name: 'Progress',
-    component: Progress,
-    meta: { requiresAuth: true }
+    path: '/',
+    component: MainLayout,
+    meta: { requiresAuth: true },
+    children: [
+      {
+        path: '/home',
+        name: 'Home',
+        component: Home
+      },
+      {
+        path: '/vulnerabilities',
+        name: 'Vulnerabilities',
+        component: Vulnerabilities
+      },
+      {
+        path: '/learning',
+        name: 'Learning',
+        component: Learning
+      },
+      {
+        path: '/users',
+        name: 'Users',
+        component: Users
+      },
+      {
+        path: '/progress',
+        name: 'Progress',
+        component: Progress
+      }
+    ]
   }
 ]
 

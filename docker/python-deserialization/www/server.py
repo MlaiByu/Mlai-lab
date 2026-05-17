@@ -5,7 +5,7 @@ import pickle
 import base64
 import os
 
-FLAG = "Mlai{python_pickle_flag}"
+FLAG = "Mlai{Python-Deserialization-Success}"
 
 class FlagReader:
     def __reduce__(self):

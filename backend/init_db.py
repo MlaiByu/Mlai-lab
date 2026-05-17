@@ -86,6 +86,7 @@ def init_db():
                 server_port INTEGER,
                 start_time DATETIME NOT NULL,
                 end_time DATETIME,
+                success INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (user_id) REFERENCES users(id),
                 FOREIGN KEY (vulnerability_id) REFERENCES vulnerabilities(id)
             )
