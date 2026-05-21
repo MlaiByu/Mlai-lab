@@ -23,41 +23,16 @@ def start_experiment():
     vulnerability_id = data.get('vulnerability_id', data.get('vulnerabilityId', 0))
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    session_id = str(uuid.uuid4())
-    create_experiment_session(user_id, session_id, vulnerability_id=vulnerability_id)
+    session_db_id, session_uuid = create_experiment_session(user_id, vulnerability_id=vulnerability_id)
 
     record = get_experiment_record(user_id, vulnerability_id)
     if record:
         new_attempt = record.get('attempt_count', 0) + 1
-        update_experiment_record(user_id, vulnerability_id, attempt_count=new_attempt, last_attempt=now)
+        update_experiment_record(user_id, vulnerability_id, attempt_count=new_attempt)
     else:
-        insert_experiment_record(user_id, vulnerability_id, attempt_count=1, success=0)
+        insert_experiment_record(user_id, vulnerability_id, attempt_count=1, success_count=0)
 
-    return jsonify({"success": True, "message": "实验已开始", "startTime": now, "sessionId": session_id})
-
-@experiment_bp.route('/api/experiment/complete', methods=['POST'])
-def complete_experiment():
-    data = request.get_json()
-    user_id = data.get('user_id', data.get('userId', 0))
-    vulnerability_id = data.get('vulnerability_id', data.get('vulnerabilityId', 0))
-    session_id = data.get('session_id', data.get('sessionId', None))
-    now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    record = get_experiment_record(user_id, vulnerability_id)
-    if record:
-        current_success = record.get('success', 0)
-        new_success = current_success + 1
-        if current_success == 0:
-            update_experiment_record(user_id, vulnerability_id, success=new_success, first_success=now)
-        else:
-            update_experiment_record(user_id, vulnerability_id, success=new_success)
-    else:
-        insert_experiment_record(user_id, vulnerability_id, attempt_count=1, success=1, first_success=now)
-
-    if session_id:
-        update_experiment_session(session_id, end_time=now, success=1)
-
-    return jsonify({"success": True, "message": "实验完成"})
+    return jsonify({"success": True, "message": "实验已开始", "startTime": now, "sessionId": session_uuid})
 
 @experiment_bp.route('/api/experiment/submit', methods=['POST'])
 def submit_flag():
@@ -65,7 +40,7 @@ def submit_flag():
     user_id = data.get('user_id', data.get('userId', 0))
     vulnerability_id = data.get('vulnerability_id', data.get('vulnerabilityId', 0))
     flag = data.get('flag', '').strip()
-    session_id = data.get('session_id', data.get('sessionId', None))
+    session_db_id = data.get('session_db_id', data.get('sessionDbId', None))
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     vuln = get_vulnerability_by_id(vulnerability_id)
@@ -79,8 +54,8 @@ def submit_flag():
         record = get_experiment_record(user_id, vulnerability_id)
         is_first_success = False
         
-        if session_id and str(session_id).strip():
-            update_experiment_session(str(session_id).strip(), end_time=now, success=1)
+        if session_db_id:
+            update_experiment_session(session_db_id, end_time=now, success=1)
         else:
             sessions = get_experiment_sessions(user_id)
             target_session = None
@@ -89,18 +64,16 @@ def submit_flag():
                     if not target_session or s.get('start_time', '') > target_session.get('start_time', ''):
                         target_session = s
             if target_session:
-                update_experiment_session(target_session.get('session_id'), end_time=now, success=1)
+                update_experiment_session(target_session.get('id'), end_time=now, success=1)
         
         if record:
-            current_success = record.get('success', 0)
+            current_success = record.get('success_count', 0)
             new_success = current_success + 1
             if current_success == 0:
-                update_experiment_record(user_id, vulnerability_id, success=new_success, first_success=now)
                 is_first_success = True
-            else:
-                update_experiment_record(user_id, vulnerability_id, success=new_success)
+            update_experiment_record(user_id, vulnerability_id, success_count=new_success)
         else:
-            insert_experiment_record(user_id, vulnerability_id, attempt_count=1, success=1, first_success=now)
+            insert_experiment_record(user_id, vulnerability_id, attempt_count=1, success_count=1)
             is_first_success = True
         
         if is_first_success:
@@ -124,14 +97,14 @@ def get_vulnerabilities_route():
 @experiment_bp.route('/api/experiment/end_session', methods=['POST'])
 def end_session():
     data = request.get_json()
-    session_id = data.get('session_id', data.get('sessionId', ''))
+    session_db_id = data.get('session_db_id', data.get('sessionDbId', 0))
     success = data.get('success', False)
     user_id = data.get('user_id', data.get('userId', 0))
     vulnerability_id = data.get('vulnerability_id', data.get('vulnerabilityId', 0))
     now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    if session_id and str(session_id).strip():
-        update_experiment_session(str(session_id).strip(), end_time=now, success=1 if success else 0)
+    if session_db_id:
+        update_experiment_session(session_db_id, end_time=now, success=1 if success else 0)
     elif user_id and vulnerability_id and success:
         sessions = get_experiment_sessions(user_id)
         target_session = None
@@ -140,7 +113,7 @@ def end_session():
                 if not target_session or s.get('start_time', '') > target_session.get('start_time', ''):
                     target_session = s
         if target_session:
-            update_experiment_session(target_session.get('session_id'), end_time=now, success=1)
+            update_experiment_session(target_session.get('id'), end_time=now, success=1)
 
     return jsonify({"success": True, "message": "实验会话已结束"})
 
@@ -152,9 +125,7 @@ def get_experiment_records_route(user_id):
         'name': r.get('name', ''),
         'category': r.get('category', ''),
         'attempt_count': r['attempt_count'],
-        'success_count': r.get('success', 0),
-        'success': r.get('success', 0) >= 1,
-        'first_success': r.get('first_success'),
-        'last_attempt': r.get('last_attempt')
+        'success_count': r.get('success_count', 0),
+        'success': r.get('success_count', 0) >= 1
     } for r in records]
     return jsonify({"success": True, "records": result})

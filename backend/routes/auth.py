@@ -26,6 +26,7 @@ def verify_token(token):
 
 @auth_bp.route('/api/auth/register', methods=['POST'])
 def register():
+    import re
     data = request.get_json()
     username = data.get('username', '').strip()
     password = data.get('password', '')
@@ -35,6 +36,9 @@ def register():
     
     if len(username) < 3 or len(username) > 32:
         return jsonify({"success": False, "message": "用户名长度必须在3-32个字符之间"})
+    
+    if not re.match(r'^[a-zA-Z0-9_]+$', username):
+        return jsonify({"success": False, "message": "用户名只能包含字母、数字和下划线"})
     
     if len(password) < 6:
         return jsonify({"success": False, "message": "密码长度至少6个字符"})

@@ -168,9 +168,9 @@
                 容器ID: {{ (currentContainer.container_id || currentContainer.id)?.slice(0, 12) }}...
               </span>
             </div>
-            <el-button type="danger" class="stop-btn" @click="stopEnvironment">
-              <el-icon><Box /></el-icon>
-              停止环境
+            <el-button type="danger" class="stop-btn" @click="confirmStopEnvironment" :loading="isStopping">
+              <el-icon><TurnOff /></el-icon>
+              {{ isStopping ? '停止中...' : '停止环境' }}
             </el-button>
           </div>
         </div>
@@ -219,6 +219,7 @@ import {
   Filter, PriceTag, CircleCheck, Loading, CircleClose, ArrowRight, Flag, Monitor, 
   VideoPlay, Box, Link, Message, TurnOff, InfoFilled, DataBoard, Cpu, Lock, Goods, Upload
 } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import store from '../store'
 import { experiment as experimentApi, container as containerApi } from '../api'
 
@@ -242,6 +243,12 @@ const selectedCategory = ref('sqli')
 const remainingTime = ref('01:00:00')
 const currentSessionId = ref('')
 let countdownTimer = null
+
+const loadingStatus = ref({
+  loading: false,
+  error: null,
+  message: ''
+})
 
 const vulnDescriptions = {
   1: '学习基础的SQL注入原理和攻击方法',
@@ -299,8 +306,12 @@ const getCategoryDescriptionShort = (categoryId) => {
 }
 
 const loadVulnerabilities = async () => {
+  loadingStatus.value = { loading: true, error: null, message: '加载漏洞列表...' }
   try {
     const response = await fetch('/api/experiment/vulnerabilities')
+    if (!response.ok) {
+      throw new Error(`请求失败，状态码: ${response.status}`)
+    }
     const data = await response.json()
     if (data.success) {
       vulnerabilities.value = data.vulnerabilities.map(vuln => ({
@@ -309,10 +320,33 @@ const loadVulnerabilities = async () => {
         category: vuln.category,
         difficulty: vuln.difficulty
       }))
+      loadingStatus.value = { loading: false, error: null, message: '' }
+    } else {
+      loadingStatus.value = { loading: false, error: 'error', message: data.message || '加载漏洞列表失败' }
+      showErrorToast(data.message || '加载漏洞列表失败')
     }
   } catch (error) {
     console.error('Failed to load vulnerabilities:', error)
+    loadingStatus.value = { loading: false, error: 'error', message: '网络连接失败，请检查网络或稍后重试' }
+    showErrorToast('网络连接失败，请检查网络或稍后重试')
   }
+}
+
+const showErrorToast = (message) => {
+  ElMessage({
+    message: message,
+    type: 'error',
+    duration: 3000,
+    showClose: true
+  })
+}
+
+const showSuccessToast = (message) => {
+  ElMessage({
+    message: message,
+    type: 'success',
+    duration: 2000
+  })
 }
 
 const currentCategoryName = computed(() => {
@@ -371,40 +405,60 @@ const getTargetUrl = () => {
 }
 
 const openChallengeModal = async (vuln) => {
-  selectedChallenge.value = vuln
-  showChallengeModal.value = true
-  flagInput.value = ''
-  flagResult.value = null
-  currentContainer.value = null
+    selectedChallenge.value = vuln
+    showChallengeModal.value = true
+    flagInput.value = ''
+    flagResult.value = null
+    currentContainer.value = null
+    showOtherContainer.value = null
 
-  try {
-    if (store.state.user?.id) {
-      const containersResponse = await containerApi.list(store.state.user.id)
-      if (containersResponse.success && containersResponse.containers.length > 0) {
-        const currentVulnContainer = containersResponse.containers.find(
-          c => c.vulnerability_id === vuln.id
-        )
-        if (currentVulnContainer) {
-          currentContainer.value = currentVulnContainer
-          currentSessionId.value = currentVulnContainer.session_id || ''
-          if (currentVulnContainer.timeout_at) {
-            const remaining = Math.max(0, Math.floor(currentVulnContainer.timeout_at - Date.now() / 1000))
-            if (remaining > 0) {
-              startCountdownWithRemaining(remaining)
-            } else {
-              await stopEnvironment()
-              flagResult.value = { success: false, message: '时间已到，靶场环境已自动销毁' }
+    try {
+        console.log('[openChallengeModal] 打开挑战:', vuln.name, vuln.id)
+        console.log('[openChallengeModal] 当前用户:', store.state.user?.id)
+        
+        await store.actions.loadRunningContainers()
+        console.log('[openChallengeModal] store容器状态:', store.state.runningContainers)
+        
+        if (store.state.user?.id) {
+            const containersResponse = await containerApi.list(store.state.user.id)
+            console.log('[openChallengeModal] 容器列表响应:', containersResponse)
+            
+            if (containersResponse.success && containersResponse.containers.length > 0) {
+                const vulnId = parseInt(vuln.id)
+                const currentVulnContainer = containersResponse.containers.find(
+                    c => {
+                        const cVulnId = parseInt(c.vulnerability_id)
+                        return cVulnId === vulnId
+                    }
+                )
+                
+                if (currentVulnContainer) {
+                    console.log('[openChallengeModal] 找到运行中的容器:', currentVulnContainer)
+                    currentContainer.value = currentVulnContainer
+                    currentSessionId.value = currentVulnContainer.session_db_id || ''
+                    if (currentVulnContainer.timeout_at) {
+                        const remaining = Math.max(0, Math.floor(currentVulnContainer.timeout_at - Date.now() / 1000))
+                        if (remaining > 0) {
+                            startCountdownWithRemaining(remaining)
+                        } else {
+                            await stopEnvironment()
+                            flagResult.value = { success: false, message: '时间已到，靶场环境已自动销毁' }
+                        }
+                    } else {
+                        startCountdown()
+                    }
+                    return
+                }
+                
+                const otherContainer = containersResponse.containers[0]
+                if (otherContainer) {
+                    showOtherContainer.value = otherContainer
+                }
             }
-          } else {
-            startCountdown()
-          }
-          return
         }
-      }
+    } catch (error) {
+        console.error('[openChallengeModal] 检查容器状态失败:', error)
     }
-  } catch (error) {
-    console.log('检查容器状态失败:', error)
-  }
 }
 
 const closeChallengeModal = () => {
@@ -470,6 +524,7 @@ const showOtherContainer = ref(null)
 const startEnvironment = async () => {
   if (!selectedChallenge.value) return
   isStarting.value = true
+  flagResult.value = null
   try {
     if (store.state.user?.id) {
       const containersResponse = await containerApi.list(store.state.user.id)
@@ -495,12 +550,16 @@ const startEnvironment = async () => {
       startCountdown()
       await store.actions.loadExperimentRecords()
       await store.actions.loadRunningContainers()
-      flagResult.value = null
+      showSuccessToast('实验环境已启动')
     } else {
-      flagResult.value = { success: false, message: response.message || '启动失败' }
+      const errorMsg = response.message || '启动失败'
+      flagResult.value = { success: false, message: errorMsg }
+      showErrorToast(errorMsg)
     }
   } catch (error) {
-    flagResult.value = { success: false, message: '启动失败: ' + error.message }
+    const errorMsg = '启动失败: ' + error.message
+    flagResult.value = { success: false, message: errorMsg }
+    showErrorToast(errorMsg)
   } finally {
     isStarting.value = false
   }
@@ -508,44 +567,164 @@ const startEnvironment = async () => {
 
 const closeOtherContainer = async () => {
   if (!showOtherContainer.value) return
+  const containerId = showOtherContainer.value.container_id || showOtherContainer.value.id
+  
   try {
-    await containerApi.remove(
-      showOtherContainer.value.container_id || showOtherContainer.value.id,
+    console.log('[关闭其他容器] 开始销毁:', containerId)
+    const response = await containerApi.remove(
+      containerId,
       store.state.user?.id || 0,
       showOtherContainer.value.vulnerability_id || 0,
-      showOtherContainer.value.session_id || ''
+      showOtherContainer.value.session_db_id || '',
+      true // 使用同步模式
     )
+    
     showOtherContainer.value = null
     flagResult.value = null
+    
+    console.log('[关闭其他容器] 刷新状态...')
     await store.actions.loadRunningContainers()
+    
+    console.log('[关闭其他容器] 验证销毁...')
+    let verifyCount = 0
+    const maxVerify = 3
+    let containerGone = false
+    
+    while (verifyCount < maxVerify && !containerGone) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      await store.actions.loadRunningContainers()
+      
+      const containers = store.state.runningContainers || []
+      containerGone = !containers.some(c => c.container_id === containerId)
+      verifyCount++
+    }
+    
+    if (containerGone) {
+      showSuccessToast('容器已成功销毁')
+    } else {
+      showSuccessToast('容器销毁中')
+    }
   } catch (error) {
     console.error('关闭容器失败:', error)
+    const errorMsg = error.response?.data?.message || error.message
+    if (errorMsg?.includes('容器不存在')) {
+      showOtherContainer.value = null
+      flagResult.value = null
+      await store.actions.loadRunningContainers()
+      showSuccessToast('容器已不存在')
+    } else {
+      showErrorToast('关闭容器失败: ' + errorMsg)
+    }
   }
 }
 
+const isStopping = ref(false)
+
+const confirmStopEnvironment = () => {
+  ElMessageBox.confirm(
+    '确定要停止当前实验环境吗？',
+    '确认停止',
+    {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning',
+      icon: 'warning'
+    }
+  ).then(() => {
+    stopEnvironment()
+  }).catch(() => {
+    // 用户取消
+  })
+}
+
 const stopEnvironment = async (success = false) => {
-  if (!currentContainer.value) return
+  if (!currentContainer.value || isStopping.value) return
+  
+  isStopping.value = true
   clearCountdown()
+  const containerId = currentContainer.value.container_id
+  
   try {
     if (currentSessionId.value) {
       await experimentApi.endSession(currentSessionId.value, success, store.state.user?.id || 0, selectedChallenge.value?.id || 0)
     } else if (success) {
       await experimentApi.endSession('', success, store.state.user?.id || 0, selectedChallenge.value?.id || 0)
     }
-    if (currentContainer.value.container_id) {
-      await containerApi.remove(
-        currentContainer.value.container_id,
+    
+    if (containerId) {
+      console.log('[停止容器] 开始销毁容器:', containerId)
+      const response = await containerApi.remove(
+        containerId,
         store.state.user?.id || 0,
         selectedChallenge.value?.id || 0,
-        currentSessionId.value || ''
+        currentSessionId.value || '',
+        true // 使用同步模式
       )
+      
+      if (!response.success && !response.message?.includes('容器不存在')) {
+        throw new Error(response.message || '删除容器失败')
+      }
+      
+      console.log('[停止容器] 容器销毁响应:', response)
     }
+    
     currentSessionId.value = ''
     currentContainer.value = null
+    
+    console.log('[停止容器] 刷新容器状态...')
     await store.actions.loadExperimentRecords()
     await store.actions.loadRunningContainers()
+    
+    console.log('[停止容器] 验证容器是否已销毁...')
+    let verifyCount = 0
+    const maxVerify = 3
+    let containerGone = false
+    
+    while (verifyCount < maxVerify && !containerGone) {
+      await new Promise(resolve => setTimeout(resolve, 500))
+      await store.actions.loadRunningContainers()
+      
+      const containers = store.state.runningContainers || []
+      containerGone = !containers.some(c => c.container_id === containerId)
+      
+      if (!containerGone) {
+        console.log(`[停止容器] 验证失败 (${verifyCount + 1}/${maxVerify}), 容器仍在...`)
+      }
+      verifyCount++
+    }
+    
+    if (!success) {
+      if (containerGone) {
+        showSuccessToast('实验环境已成功销毁')
+      } else {
+        showSuccessToast('实验环境已停止销毁中')
+      }
+    }
   } catch (error) {
     console.error('停止容器失败:', error)
+    const errorMsg = error.response?.data?.message || error.message
+    
+    if (errorMsg?.includes('容器不存在')) {
+      currentSessionId.value = ''
+      currentContainer.value = null
+      await store.actions.loadExperimentRecords()
+      await store.actions.loadRunningContainers()
+      showSuccessToast('容器已不存在')
+    } else {
+      showErrorToast('停止容器失败: ' + errorMsg)
+      
+      try {
+        await store.actions.loadRunningContainers()
+        if (!store.state.runningContainers?.some(c => c.container_id === containerId)) {
+          currentSessionId.value = ''
+          currentContainer.value = null
+        }
+      } catch (e) {
+        console.error('重新加载容器状态失败:', e)
+      }
+    }
+  } finally {
+    isStopping.value = false
   }
 }
 
@@ -560,7 +739,7 @@ const submitFlag = async () => {
       user_id: store.state.user?.id || 0,
       vulnerability_id: selectedChallenge.value.id,
       flag: flagInput.value,
-      session_id: currentSessionId.value
+      session_db_id: currentSessionId.value
     })
     if (response.success) {
       flagResult.value = { success: true, message: 'Flag正确！挑战成功！' }
@@ -580,7 +759,53 @@ const submitFlag = async () => {
 onMounted(async () => {
   await loadVulnerabilities()
   await store.actions.loadExperimentRecords()
+  await store.actions.loadRunningContainers()
+  await loadCurrentContainer()
 })
+
+const loadCurrentContainer = async () => {
+    if (!store.state.user?.id) return
+    
+    try {
+        const response = await containerApi.list(store.state.user.id)
+        if (response.success && response.containers.length > 0) {
+            let container = null
+            
+            if (selectedChallenge.value) {
+                const vulnId = parseInt(selectedChallenge.value.id)
+                container = response.containers.find(c => {
+                    const cVulnId = parseInt(c.vulnerability_id)
+                    return cVulnId === vulnId
+                })
+            } else if (response.containers.length === 1) {
+                container = response.containers[0]
+                const cVulnId = parseInt(container.vulnerability_id)
+                const vuln = vulnerabilities.value.find(v => v.id === cVulnId)
+                if (vuln) {
+                    selectedChallenge.value = vuln
+                }
+            }
+            
+            if (container) {
+                currentContainer.value = container
+                currentSessionId.value = container.session_db_id || ''
+                if (container.timeout_at) {
+                    const remainingSeconds = Math.max(0, Math.floor(container.timeout_at - Date.now() / 1000))
+                    if (remainingSeconds > 0) {
+                        startCountdownWithRemaining(remainingSeconds)
+                    } else {
+                        await stopEnvironment()
+                        flagResult.value = { success: false, message: '时间已到，靶场环境已自动销毁' }
+                    }
+                } else {
+                    startCountdown()
+                }
+            }
+        }
+    } catch (error) {
+        console.error('加载当前容器失败:', error)
+    }
+}
 
 onUnmounted(() => {
   clearCountdown()

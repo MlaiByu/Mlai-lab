@@ -3,7 +3,7 @@ import os
 
 # 并发配置 - 针对50+并发用户优化
 workers = min(multiprocessing.cpu_count() * 2 + 1, 12)
-worker_class = 'gunicorn.workers.gthread.GThreadWorker'
+worker_class = 'gthread'
 threads = 8
 worker_connections = 1000
 
@@ -19,8 +19,8 @@ keepalive = 60
 # 进程管理 - 防止内存泄漏
 max_requests = 500
 max_requests_jitter = 50
-preload_app = False
-reload = True
+preload_app = True
+reload = False
 
 # 日志配置
 log_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'log')

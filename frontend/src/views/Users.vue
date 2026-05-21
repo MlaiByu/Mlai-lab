@@ -95,6 +95,7 @@
                   <el-button 
                     size="small" 
                     type="primary" 
+                    v-if="canManageUser(scope.row)"
                     @click="changePassword(scope.row)"
                     class="action-btn edit-btn"
                   >
@@ -103,8 +104,8 @@
                   </el-button>
                   <el-button 
                     size="small" 
-                    v-if="scope.row.role === 'student'" 
                     type="success" 
+                    v-if="canPromoteUser(scope.row)"
                     @click="promoteUser(scope.row)"
                     class="action-btn promote-btn"
                   >
@@ -113,8 +114,8 @@
                   </el-button>
                   <el-button 
                     size="small" 
-                    v-if="scope.row.role === 'teacher'" 
                     type="warning" 
+                    v-if="canDemoteUser(scope.row)"
                     @click="demoteUser(scope.row)"
                     class="action-btn demote-btn"
                   >
@@ -124,6 +125,7 @@
                   <el-button 
                     size="small" 
                     type="danger" 
+                    v-if="canManageUser(scope.row)"
                     @click="deleteUser(scope.row)"
                     class="action-btn delete-btn"
                   >
@@ -159,14 +161,17 @@
         <div class="modal-body">
           <div class="stats-summary">
             <div class="stat-card-mini">
+              <div class="stat-icon"><el-icon><Aim /></el-icon></div>
               <span class="stat-label">总尝试次数</span>
               <span class="stat-value">{{ selectedUserStats?.total_attempts || 0 }}</span>
             </div>
             <div class="stat-card-mini">
+              <div class="stat-icon"><el-icon><CircleCheck /></el-icon></div>
               <span class="stat-label">成功次数</span>
               <span class="stat-value success">{{ selectedUserStats?.total_success || 0 }}</span>
             </div>
             <div class="stat-card-mini">
+              <div class="stat-icon"><el-icon><TrendCharts /></el-icon></div>
               <span class="stat-label">完成率</span>
               <span class="stat-value primary">{{ getSelectedUserCompletionRate() }}%</span>
             </div>
@@ -199,10 +204,7 @@
                   <span class="stat-label">成功次数</span>
                   <span class="stat-value">{{ exp.success_count }}</span>
                 </div>
-                <div class="stat-row">
-                  <span class="stat-label">最后尝试</span>
-                  <span class="stat-value">{{ formatDate(exp.last_attempt) }}</span>
-                </div>
+
               </div>
             </div>
           </div>
@@ -226,12 +228,15 @@
           </button>
         </div>
         <div class="modal-body">
-          <el-form :model="formData" label-width="100px" class="user-form">
-            <el-form-item label="用户名">
-              <el-input v-model="formData.username" placeholder="请输入用户名"></el-input>
+          <el-form :model="formData" :rules="formRules" ref="userFormRef" label-width="100px" class="user-form">
+            <el-form-item label="用户名" prop="username">
+              <el-input v-model="formData.username" placeholder="请输入用户名（3-32个字符，仅字母、数字、下划线）"></el-input>
             </el-form-item>
-            <el-form-item label="密码" v-if="!editingUser">
-              <el-input v-model="formData.password" type="password" placeholder="请输入密码"></el-input>
+            <el-form-item label="密码" prop="password" v-if="!editingUser">
+              <el-input v-model="formData.password" type="password" placeholder="请输入密码（至少6位）"></el-input>
+            </el-form-item>
+            <el-form-item label="确认密码" prop="confirmPassword" v-if="!editingUser">
+              <el-input v-model="formData.confirmPassword" type="password" placeholder="请再次输入密码"></el-input>
             </el-form-item>
             <el-form-item label="角色">
               <el-select 
@@ -257,11 +262,12 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { 
-  Search, Plus, View, Key, TrendCharts, ArrowDown, Delete, User, Close, Download
+  Search, Plus, View, Key, TrendCharts, ArrowDown, Delete, User, Close, Download, Aim, CircleCheck
 } from '@element-plus/icons-vue'
 import { ElMessageBox, ElMessage } from 'element-plus'
 import { users as usersApi } from '../api'
 import { formatDate } from '../utils/date'
+import store from '../store'
 
 const users = ref([])
 const searchQuery = ref('')
@@ -273,6 +279,32 @@ const selectedUserStats = ref(null)
 const selectedUserExperiments = ref([])
 const currentPage = ref(1)
 const pageSize = ref(10)
+const userFormRef = ref(null)
+
+const formRules = {
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 3, max: 32, message: '用户名长度必须在3-32个字符之间', trigger: 'blur' },
+    { pattern: /^[a-zA-Z0-9_]+$/, message: '用户名只能包含字母、数字和下划线', trigger: 'blur' }
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, message: '密码长度至少6位', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    { required: true, message: '请再次输入密码', trigger: 'blur' },
+    { 
+      validator: (rule, value, callback) => {
+        if (value !== formData.value.password) {
+          callback(new Error('两次输入的密码不一致'))
+        } else {
+          callback()
+        }
+      },
+      trigger: 'blur'
+    }
+  ]
+}
 const total = ref(0)
 
 const formData = ref({
@@ -282,6 +314,37 @@ const formData = ref({
 })
 
 const vulnerabilityCount = 11
+
+const currentUserRole = computed(() => {
+  return store.state.user?.role || 'student'
+})
+
+const canManageUser = (targetUser) => {
+  if (!targetUser) return false
+  if (currentUserRole.value === 'admin') {
+    return targetUser.role !== 'admin'
+  }
+  if (currentUserRole.value === 'teacher') {
+    return targetUser.role === 'student'
+  }
+  return false
+}
+
+const canPromoteUser = (targetUser) => {
+  if (!targetUser) return false
+  if (currentUserRole.value === 'admin') {
+    return targetUser.role === 'student'
+  }
+  return false
+}
+
+const canDemoteUser = (targetUser) => {
+  if (!targetUser) return false
+  if (currentUserRole.value === 'admin') {
+    return targetUser.role === 'teacher'
+  }
+  return false
+}
 
 const filteredUsers = computed(() => {
   let result = users.value
@@ -464,6 +527,7 @@ const addUser = () => {
   formData.value = {
     username: '',
     password: '',
+    confirmPassword: '',
     role: 'student'
   }
   showAddModal.value = true
@@ -491,17 +555,36 @@ const deleteUser = async (user) => {
       }
     )
     
-    await usersApi.delete(user.id)
-    await loadUsers()
+    const response = await usersApi.delete(user.id)
+    if (response.success) {
+      ElMessage.success(response.message)
+      await loadUsers()
+    } else {
+      ElMessage.error(response.message || '删除失败')
+    }
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除用户失败:', error)
+      ElMessage.error('删除失败: ' + error.message)
     }
   }
 }
 
 const saveUser = async () => {
   try {
+    if (!editingUser.value) {
+      if (!userFormRef.value) {
+        ElMessage.error('表单初始化失败')
+        return
+      }
+      
+      try {
+        await userFormRef.value.validate()
+      } catch (error) {
+        return
+      }
+    }
+    
     if (editingUser.value) {
       if (editingUser.value.role === 'admin') {
         ElMessage.warning('管理员角色不能被修改')
@@ -536,7 +619,11 @@ const saveUser = async () => {
       
       ElMessage.success('用户更新成功')
     } else {
-      await usersApi.create(formData.value)
+      await usersApi.create({
+        username: formData.value.username,
+        password: formData.value.password,
+        role: formData.value.role
+      })
       ElMessage.success('用户添加成功')
     }
     closeModal()
@@ -554,18 +641,32 @@ const changePassword = async (user) => {
   
   try {
     const { value: password } = await ElMessageBox.prompt(
-      `请输入用户 ${user.username} 的新密码`,
+      `请输入用户 ${user.username} 的新密码（至少6位）`,
       '修改密码',
       {
         confirmButtonText: '确定',
         cancelButtonText: '取消',
         inputType: 'password',
-        inputPlaceholder: '请输入新密码'
+        inputPlaceholder: '请输入新密码（至少6位）',
+        validateInput: (value) => {
+          if (!value) {
+            return '密码不能为空'
+          }
+          if (value.length < 6) {
+            return '密码长度至少6位'
+          }
+          return true
+        }
       }
     )
     
     if (!password) {
       ElMessage.warning('密码不能为空')
+      return
+    }
+    
+    if (password.length < 6) {
+      ElMessage.warning('密码长度至少6位')
       return
     }
     
@@ -643,7 +744,11 @@ const closeModal = () => {
   formData.value = {
     username: '',
     password: '',
+    confirmPassword: '',
     role: 'student'
+  }
+  if (userFormRef.value) {
+    userFormRef.value.resetFields()
   }
 }
 
@@ -874,9 +979,10 @@ onMounted(() => {
 
 .modal-content {
   background: white;
-  border-radius: 20px;
+  border-radius: 16px;
   width: 90%;
-  max-width: 500px;
+  max-width: 450px;
+  max-height: 85vh;
   overflow: hidden;
   animation: slideUp 0.3s ease;
 }
@@ -893,7 +999,8 @@ onMounted(() => {
 }
 
 .modal-content.progress-modal {
-  max-width: 700px;
+  max-width: 620px;
+  max-height: 80vh;
 }
 
 .modal-header {
@@ -930,7 +1037,13 @@ onMounted(() => {
 }
 
 .modal-body {
-  padding: 24px;
+  padding: 20px 24px;
+  max-height: calc(85vh - 130px);
+  overflow-y: auto;
+}
+
+.progress-modal .modal-body {
+  max-height: calc(80vh - 140px);
 }
 
 .user-form {
@@ -949,35 +1062,64 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 28px;
 }
 
 .stat-card-mini {
-  background: #f9fafb;
-  border-radius: 12px;
-  padding: 16px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 16px;
+  padding: 20px 16px;
   text-align: center;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+}
+
+.stat-card-mini:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.stat-card-mini .stat-icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: white;
 }
 
 .stat-card-mini .stat-label {
   display: block;
   font-size: 13px;
-  color: #6b7280;
+  color: #64748b;
   margin-bottom: 8px;
+  font-weight: 500;
 }
 
 .stat-card-mini .stat-value {
-  font-size: 24px;
+  font-size: 30px;
   font-weight: 700;
-  color: #1f2937;
+  color: #1e293b;
 }
 
 .stat-card-mini .stat-value.success {
-  color: #22c55e;
+  color: #10b981;
+}
+
+.stat-card-mini .stat-value.success + .stat-icon {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
 }
 
 .stat-card-mini .stat-value.primary {
   color: #6366f1;
+}
+
+.stat-card-mini .stat-value.primary + .stat-icon {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
 }
 
 .detail-title {
@@ -989,33 +1131,64 @@ onMounted(() => {
 
 .empty-state {
   text-align: center;
-  padding: 40px 0;
+  padding: 60px 40px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 16px;
+  border: 1px dashed #cbd5e1;
+  margin-top: 8px;
+}
+
+.empty-state :deep(.el-empty__description) {
+  color: #94a3b8 !important;
+  font-size: 14px;
+  margin-top: 12px;
 }
 
 .experiment-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
-  max-height: 350px;
+  max-height: 380px;
   overflow-y: auto;
+  padding-right: 8px;
+}
+
+.experiment-cards::-webkit-scrollbar {
+  width: 6px;
+}
+
+.experiment-cards::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.experiment-cards::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
 }
 
 .experiment-card {
   background: white;
-  border-radius: 12px;
-  padding: 16px;
-  border: 2px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 20px;
+  border: 2px solid #e2e8f0;
   transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.experiment-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
 }
 
 .experiment-card.completed {
-  border-color: #22c55e;
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.05) 0%, white 100%);
+  border-color: #10b981;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, white 100%);
 }
 
 .experiment-card.in-progress {
   border-color: #f59e0b;
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, white 100%);
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.06) 0%, white 100%);
 }
 
 .experiment-card .card-header {
@@ -1028,33 +1201,37 @@ onMounted(() => {
 .vuln-info-mini {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
 }
 
 .status-dot.completed {
-  background: #22c55e;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
 }
 
 .status-dot.pending {
-  background: #d1d5db;
+  background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);
 }
 
 .vuln-name {
   font-weight: 600;
-  color: #1f2937;
-  font-size: 14px;
+  color: #1e293b;
+  font-size: 15px;
 }
 
 .experiment-card .card-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
 }
 
 .stat-row {

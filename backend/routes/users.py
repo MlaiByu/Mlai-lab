@@ -9,7 +9,7 @@ def get_record_status(record, running_sessions):
         if running_sessions:
             return 'in_progress'
         return 'not_started'
-    if record.get('success', 0) >= 1:
+    if record.get('success_count', 0) >= 1:
         return 'completed'
     if running_sessions:
         return 'in_progress'
@@ -44,8 +44,8 @@ def get_users():
                 'name': v['name'],
                 'category': v['category'],
                 'attempt_count': record['attempt_count'] if record else 0,
-                'success_count': record.get('success', 0) if record else 0,
-                'success': record.get('success', 0) >= 1 if record else False,
+                'success_count': record.get('success_count', 0) if record else 0,
+                'success': record.get('success_count', 0) >= 1 if record else False,
                 'status': get_record_status(record, is_running)
             }
             exp_list.append(exp_dict)
@@ -67,6 +67,87 @@ def get_users():
     return jsonify({"success": True, "data": result})
 
 
+@users_bp.route('/api/users/create', methods=['POST'])
+@teacher_or_admin_required
+def create_user_api():
+    import re
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+    role = data.get('role', 'student')
+
+    if not username or not password:
+        return jsonify({"success": False, "message": "用户名和密码不能为空"})
+
+    if len(username) < 3 or len(username) > 50:
+        return jsonify({"success": False, "message": "用户名长度需在3-50个字符之间"})
+
+    if not re.match(r'^[a-zA-Z0-9_]+$', username):
+        return jsonify({"success": False, "message": "用户名只能包含字母、数字和下划线"})
+
+    if len(password) < 6:
+        return jsonify({"success": False, "message": "密码长度至少6位"})
+
+    if role not in ['student', 'teacher']:
+        return jsonify({"success": False, "message": "无效的角色"})
+
+    if get_user_by_username(username):
+        return jsonify({"success": False, "message": "用户名已存在"})
+
+    try:
+        user_id = create_user(username, password, role)
+        return jsonify({"success": True, "message": "用户创建成功", "user_id": user_id})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+
+@users_bp.route('/api/users/<int:user_id>', methods=['PUT'])
+@teacher_or_admin_required
+def update_user(user_id):
+    data = request.get_json()
+    username = data.get('username')
+    role = data.get('role')
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            conn.close()
+            return jsonify({"success": False, "message": "用户不存在"})
+
+        if user['role'] == 'admin':
+            conn.close()
+            return jsonify({"success": False, "message": "管理员信息不能被修改"})
+
+        if g.role == 'teacher' and user['role'] != 'student':
+            conn.close()
+            return jsonify({"success": False, "message": "教师只能修改学生信息"})
+
+        if username:
+            cursor.execute("SELECT * FROM users WHERE username = %s AND id != %s", (username, user_id))
+            existing = cursor.fetchone()
+            if existing:
+                conn.close()
+                return jsonify({"success": False, "message": "用户名已存在"})
+            cursor.execute("UPDATE users SET username = %s WHERE id = %s", (username, user_id))
+
+        if role and role in ['student', 'teacher']:
+            if g.role == 'teacher' and role == 'teacher':
+                conn.close()
+                return jsonify({"success": False, "message": "教师不能提升用户为教师"})
+            cursor.execute("UPDATE users SET role = %s WHERE id = %s", (role, user_id))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({"success": True, "message": "用户信息更新成功"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+
 @users_bp.route('/api/users/profile/<int:user_id>', methods=['GET'])
 @login_required
 def get_user_profile(user_id):
@@ -77,6 +158,9 @@ def get_user_profile(user_id):
         user = get_user_by_id(user_id)
         if not user:
             return jsonify({"success": False, "message": "用户不存在"})
+        
+        if g.role == 'teacher' and user['role'] != 'student':
+            return jsonify({"success": False, "message": "教师只能查看学生的学习进度"}), 403
 
         vulnerabilities = get_all_vulnerabilities()
         records_dict = {r['vulnerability_id']: r for r in get_experiment_records(user_id)}
@@ -92,10 +176,9 @@ def get_user_profile(user_id):
                 'vulnerability_type': v['name'],
                 'category': v['category'],
                 'attempt_count': record['attempt_count'] if record else 0,
-                'success_count': record.get('success', 0) if record else 0,
-                'success': record.get('success', 0) >= 1 if record else False,
-                'status': get_record_status(record, is_running),
-                'last_attempt': record.get('first_success', '') if record else ''
+                'success_count': record.get('success_count', 0) if record else 0,
+                'success': record.get('success_count', 0) >= 1 if record else False,
+                'status': get_record_status(record, is_running)
             })
 
         total_attempts = sum(e['attempt_count'] for e in exp_details)
@@ -117,7 +200,8 @@ def get_user_profile(user_id):
                 },
                 "experiments": exp_details,
                 "recent_sessions": [{
-                    'session_id': s['session_id'],
+                    'session_db_id': s['id'],
+                    'session_id': s.get('session_id'),
                     'docker_container_id': s.get('docker_container_id'),
                     'server_port': s.get('server_port'),
                     'start_time': s['start_time'],
@@ -138,15 +222,22 @@ def change_password(user_id):
     if not new_password:
         return jsonify({"success": False, "message": "密码不能为空"})
 
+    if len(new_password) < 6:
+        return jsonify({"success": False, "message": "密码长度至少6位"})
+
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT id FROM users WHERE id = %s", (user_id,))
-        result = cursor.fetchone()
+        cursor.execute("SELECT role FROM users WHERE id = %s", (user_id,))
+        target_user = cursor.fetchone()
 
-        if not result:
+        if not target_user:
             conn.close()
             return jsonify({"success": False, "message": "用户不存在"})
+
+        if g.role == 'teacher' and target_user['role'] != 'student':
+            conn.close()
+            return jsonify({"success": False, "message": "教师只能修改学生的密码"})
 
         cursor.execute("UPDATE users SET password = %s WHERE id = %s", (hash_password(new_password), user_id))
         conn.commit()
@@ -178,6 +269,10 @@ def promote_to_teacher():
         if target_user['role'] == 'teacher':
             conn.close()
             return jsonify({"success": False, "message": "该用户已是教师角色"})
+
+        if g.role == 'teacher':
+            conn.close()
+            return jsonify({"success": False, "message": "教师只能管理学生，不能提升学生为教师"})
 
         cursor.execute("UPDATE users SET role = 'teacher' WHERE id = %s", (target_user_id,))
         conn.commit()
@@ -212,6 +307,10 @@ def demote_to_student():
             conn.close()
             return jsonify({"success": False, "message": "该用户已是学生角色"})
 
+        if g.role == 'teacher':
+            conn.close()
+            return jsonify({"success": False, "message": "教师只能管理学生，不能降级教师"})
+
         cursor.execute("UPDATE users SET role = 'student' WHERE id = %s", (target_user_id,))
         conn.commit()
         conn.close()
@@ -226,12 +325,12 @@ def get_recent_completions():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT r.user_id, u.username, r.vulnerability_id, r.first_success, v.name
-            FROM experiment_records r
-            JOIN users u ON r.user_id = u.id
-            LEFT JOIN vulnerabilities v ON r.vulnerability_id = v.id
-            WHERE r.success >= 1 AND r.first_success IS NOT NULL
-            ORDER BY r.first_success DESC
+            SELECT DISTINCT s.user_id, u.username, s.vulnerability_id, s.end_time, v.name
+            FROM experiment_sessions s
+            JOIN users u ON s.user_id = u.id
+            LEFT JOIN vulnerabilities v ON s.vulnerability_id = v.id
+            WHERE s.success = 1 AND s.end_time IS NOT NULL
+            ORDER BY s.end_time DESC
             LIMIT 10
         """)
         results = cursor.fetchall()
@@ -242,9 +341,93 @@ def get_recent_completions():
             'username': r['username'],
             'vulnerability_id': r['vulnerability_id'],
             'name': r.get('name', ''),
-            'first_success': r['first_success']
+            'completed_at': r['end_time']
         } for r in results]
 
         return jsonify({"success": True, "data": recent_completions})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+@users_bp.route('/api/users/<int:user_id>', methods=['DELETE'])
+@teacher_or_admin_required
+def delete_user(user_id):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT username, role FROM users WHERE id = %s", (user_id,))
+        user = cursor.fetchone()
+        
+        if not user:
+            conn.close()
+            return jsonify({"success": False, "message": "用户不存在"})
+        
+        if user['role'] == 'admin':
+            conn.close()
+            return jsonify({"success": False, "message": "不能删除管理员用户"})
+        
+        if g.role == 'teacher' and user['role'] != 'student':
+            conn.close()
+            return jsonify({"success": False, "message": "教师只能删除学生用户"})
+        
+        cursor.execute("DELETE FROM experiment_sessions WHERE user_id = %s", (user_id,))
+        cursor.execute("DELETE FROM experiment_records WHERE user_id = %s", (user_id,))
+        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": f"用户 {user['username']} 已删除"})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)})
+
+@users_bp.route('/api/users/change_own_password', methods=['POST'])
+@login_required
+def change_own_password():
+    data = request.get_json()
+    current_password = data.get('current_password', '')
+    new_password = data.get('new_password', '')
+    confirm_password = data.get('confirm_password', '')
+    
+    if not new_password or not confirm_password:
+        return jsonify({"success": False, "message": "新密码和确认密码不能为空"})
+    
+    if len(new_password) < 6:
+        return jsonify({"success": False, "message": "密码长度至少6个字符"})
+    
+    if new_password != confirm_password:
+        return jsonify({"success": False, "message": "两次输入的密码不一致"})
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT password, role, username FROM users WHERE id = %s", (g.user_id,))
+        user = cursor.fetchone()
+        
+        if not user:
+            conn.close()
+            return jsonify({"success": False, "message": "用户不存在"})
+        
+        if user['role'] in ['admin', 'teacher']:
+            if not current_password:
+                conn.close()
+                return jsonify({"success": False, "message": "管理员和教师必须输入原密码"})
+            
+            if user['password'] != hash_password(current_password):
+                conn.close()
+                return jsonify({"success": False, "message": "原密码错误"})
+        
+        if user['password'] == hash_password(new_password):
+            conn.close()
+            return jsonify({"success": False, "message": "新密码不能与原密码相同"})
+        
+        cursor.execute("UPDATE users SET password = %s WHERE id = %s", (hash_password(new_password), g.user_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({"success": True, "message": "密码修改成功，请重新登录", "force_login": True})
+    
     except Exception as e:
         return jsonify({"success": False, "message": str(e)})

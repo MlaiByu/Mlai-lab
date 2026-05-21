@@ -43,8 +43,7 @@ def init_db():
                 password VARCHAR(255) NOT NULL,
                 role VARCHAR(20) NOT NULL DEFAULT 'student',
                 score INTEGER NOT NULL DEFAULT 0,
-                created_at DATETIME NOT NULL,
-                last_login DATETIME
+                created_at DATETIME NOT NULL
             )
         ''')
         print("✓ users 表")
@@ -66,9 +65,7 @@ def init_db():
                 user_id INTEGER NOT NULL,
                 vulnerability_id INTEGER NOT NULL,
                 attempt_count INTEGER NOT NULL DEFAULT 0,
-                success INTEGER NOT NULL DEFAULT 0,
-                last_attempt DATETIME,
-                first_success DATETIME,
+                success_count INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (user_id) REFERENCES users(id),
                 FOREIGN KEY (vulnerability_id) REFERENCES vulnerabilities(id),
                 UNIQUE KEY user_vuln_unique (user_id, vulnerability_id)
@@ -123,7 +120,6 @@ def init_db():
             ("idx_users_role", "users", "role"),
             ("idx_exp_records_user", "experiment_records", "user_id"),
             ("idx_exp_records_vuln", "experiment_records", "vulnerability_id"),
-            ("idx_exp_sessions_session", "experiment_sessions", "session_id"),
             ("idx_exp_sessions_user", "experiment_sessions", "user_id"),
             ("idx_exp_sessions_vuln", "experiment_sessions", "vulnerability_id"),
             ("idx_vulnerabilities_category", "vulnerabilities", "category"),

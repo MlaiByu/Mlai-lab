@@ -111,11 +111,18 @@
       width="450px"
     >
       <el-form :model="passwordForm" label-width="100px" class="password-form">
+        <el-form-item label="原密码">
+          <el-input 
+            v-model="passwordForm.currentPassword" 
+            type="password" 
+            :placeholder="isTeacherOrAdmin ? '请输入原密码' : '学生可留空'" 
+          />
+        </el-form-item>
         <el-form-item label="新密码">
           <el-input 
             v-model="passwordForm.newPassword" 
             type="password" 
-            placeholder="请输入新密码" 
+            placeholder="请输入新密码（至少6位）" 
           />
         </el-form-item>
         <el-form-item label="确认密码">
@@ -128,7 +135,7 @@
       </el-form>
       <template #footer>
         <el-button @click="showPasswordModal = false">取消</el-button>
-        <el-button type="primary" @click="submitPasswordChange">确认修改</el-button>
+        <el-button type="primary" :loading="isPasswordChanging" @click="submitPasswordChange">确认修改</el-button>
       </template>
     </el-dialog>
   </el-header>
@@ -138,6 +145,7 @@
 import { ref, reactive, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Lock, HomeFilled, Reading, Warning, TrendCharts, UserFilled, User, ArrowDown, TurnOff } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus'
 import store from '../store'
 import { users } from '../api'
 import { formatDateTime } from '../utils/date'
@@ -157,9 +165,12 @@ const profileData = reactive({
 })
 
 const passwordForm = reactive({
+  currentPassword: '',
   newPassword: '',
   confirmPassword: ''
 })
+
+const isPasswordChanging = ref(false)
 
 const isLoggedIn = computed(() => !!store.state.user)
 const isTeacherOrAdmin = computed(() => {
@@ -212,28 +223,54 @@ const handleLogout = () => {
 
 const submitPasswordChange = async () => {
   if (!passwordForm.newPassword || !passwordForm.confirmPassword) {
+    ElMessage.warning('新密码和确认密码不能为空')
     return
   }
   
   if (passwordForm.newPassword.length < 6) {
+    ElMessage.warning('密码长度至少6个字符')
     return
   }
   
   if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    ElMessage.warning('两次输入的密码不一致')
     return
   }
   
+  isPasswordChanging.value = true
+  
   try {
-    const response = await users.changePassword(userId.value, {
-      password: passwordForm.newPassword
-    })
+    const response = await users.changeOwnPassword(
+      passwordForm.currentPassword,
+      passwordForm.newPassword,
+      passwordForm.confirmPassword
+    )
     
     if (response.success) {
+      ElMessage.success(response.message)
       showPasswordModal.value = false
       showProfileModal.value = false
+      
+      // 重置表单
+      passwordForm.currentPassword = ''
+      passwordForm.newPassword = ''
+      passwordForm.confirmPassword = ''
+      
+      // 如果需要强制重新登录
+      if (response.force_login) {
+        setTimeout(() => {
+          store.actions.logout()
+          router.push('/login')
+        }, 1500)
+      }
+    } else {
+      ElMessage.error(response.message || '修改密码失败')
     }
   } catch (error) {
     console.error('修改密码失败:', error)
+    ElMessage.error('修改密码失败: ' + (error.message || '网络错误'))
+  } finally {
+    isPasswordChanging.value = false
   }
 }
 </script>

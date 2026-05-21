@@ -23,10 +23,10 @@ services:
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass"]
-      interval: 2s
-      timeout: 2s
-      retries: 10
-      start_period: 10s
+      interval: 1s
+      timeout: 1s
+      retries: 5
+      start_period: 5s
     labels:
       - "mlai-lab-vulnerability=true"
     networks:

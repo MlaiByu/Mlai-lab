@@ -228,7 +228,7 @@ def export_single_student_progress(user_id):
     for session in sessions:
         status = '成功' if session['success'] == 1 else '失败' if session['end_time'] else '进行中'
         writer.writerow([
-            session['session_id'],
+            session['id'],
             session['start_time'],
             session.get('end_time', ''),
             status,
@@ -271,7 +271,7 @@ def get_experiment_logs():
         logs = []
         for session in sessions:
             logs.append({
-                'session_id': session['session_id'],
+                'session_db_id': session['id'],
                 'user_id': session['user_id'],
                 'username': session.get('username'),
                 'docker_container_id': session.get('docker_container_id'),

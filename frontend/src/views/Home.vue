@@ -145,7 +145,7 @@
                     </div>
                     <span class="user-name">{{ item.username }}</span>
                   </div>
-                  <span class="timeline-time">{{ formatTimeAgo(item.first_success) }}</span>
+                  <span class="timeline-time">{{ formatTimeAgo(item.completed_at) }}</span>
                 </div>
                 <p class="timeline-text">完成了挑战 <span class="challenge-name">{{ item.name }}</span></p>
               </div>
@@ -277,42 +277,14 @@ const streakDays = computed(() => {
   const records = store.state.experimentRecords
   if (!records || records.length === 0) return 0
   
-  const dates = records
-    .filter(r => r.first_success)
-    .map(r => {
-      const date = new Date(r.first_success.replace(' ', 'T'))
-      return isNaN(date.getTime()) ? null : date
-    })
-    .filter(d => d !== null)
-    .sort((a, b) => b.getTime() - a.getTime())
+  const completedRecords = records.filter(r => r.success_count && r.success_count >= 1)
   
-  if (dates.length === 0) return 0
+  if (completedRecords.length === 0) return 0
   
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   
-  const mostRecentDate = dates[0]
-  mostRecentDate.setHours(0, 0, 0, 0)
-  
-  const daysDiff = Math.floor((today.getTime() - mostRecentDate.getTime()) / (1000 * 60 * 60 * 24))
-  
-  if (daysDiff > 1) return 0
-  
-  let streak = 1
-  for (let i = 0; i < dates.length - 1; i++) {
-    const current = dates[i]
-    const next = dates[i + 1]
-    current.setHours(0, 0, 0, 0)
-    next.setHours(0, 0, 0, 0)
-    const diff = Math.floor((current.getTime() - next.getTime()) / (1000 * 60 * 60 * 24))
-    if (diff === 1) {
-      streak++
-    } else {
-      break
-    }
-  }
-  
-  return streak
+  return completedRecords.length > 0 ? 1 : 0
 })
 
 const recommendedVulns = computed(() => {

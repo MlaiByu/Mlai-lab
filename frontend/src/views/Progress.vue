@@ -142,9 +142,9 @@
                     <el-icon :size="14"><Clock /></el-icon>
                     尝试 {{ getRecord(vuln.id).attempt_count || 0 }} 次
                   </span>
-                  <span v-if="getRecord(vuln.id).first_success" class="meta-item success">
-                    <el-icon :size="14"><Calendar /></el-icon>
-                    {{ formatDateTime(getRecord(vuln.id).first_success) }}
+                  <span v-if="getRecord(vuln.id).success_count && getRecord(vuln.id).success_count > 0" class="meta-item success">
+                    <el-icon :size="14"><CheckCircle /></el-icon>
+                    已完成
                   </span>
                 </div>
               </div>

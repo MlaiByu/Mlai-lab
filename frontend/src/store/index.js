@@ -111,19 +111,6 @@ const actions = {
     }
   },
 
-  completeExperiment: async (vulnerabilityId) => {
-    if (!state.user?.id) return
-    try {
-      const response = await experimentApi.complete(state.user.id, vulnerabilityId)
-      if (response.success) {
-        await actions.loadExperimentRecords()
-      }
-      return response
-    } catch (error) {
-      throw error
-    }
-  },
-
   checkExperimentStatus: (vulnerabilityId) => {
     return state.experimentRecords.find(r => r.vulnerability_id === vulnerabilityId) || null
   },

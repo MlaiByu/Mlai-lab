@@ -75,6 +75,20 @@ export const users = {
     return request('/users/list')
   },
 
+  create: (data) => {
+    return request('/users/create', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
+  },
+
+  update: (userId, data) => {
+    return request(`/users/${userId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    })
+  },
+
   getProfile: (userId) => {
     return request(`/users/profile/${userId}`)
   },
@@ -85,7 +99,14 @@ export const users = {
       body: JSON.stringify(data)
     })
   },
-
+  
+  changeOwnPassword: (currentPassword, newPassword, confirmPassword) => {
+    return request('/users/change_own_password', {
+      method: 'POST',
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword, confirm_password: confirmPassword })
+    })
+  },
+  
   promoteToTeacher: (userId) => {
     return request('/users/promote_to_teacher', {
       method: 'POST',
@@ -102,6 +123,12 @@ export const users = {
 
   getRecentCompletions: () => {
     return request('/users/recent_completions')
+  },
+
+  delete: (userId) => {
+    return request(`/users/${userId}`, {
+      method: 'DELETE'
+    })
   }
 }
 
@@ -123,19 +150,12 @@ export const experiment = {
   endSession: (sessionId, success = false, userId = 0, vulnerabilityId = 0) => {
     return request('/experiment/end_session', {
       method: 'POST',
-      body: JSON.stringify({ session_id: sessionId, success, user_id: userId, vulnerability_id: vulnerabilityId })
+      body: JSON.stringify({ session_db_id: sessionId, success, user_id: userId, vulnerability_id: vulnerabilityId })
     })
   },
 
   records: (userId) => {
     return request(`/experiment/records/${userId}`)
-  },
-
-  complete: (userId, vulnerabilityId) => {
-    return request('/experiment/complete', {
-      method: 'POST',
-      body: JSON.stringify({ user_id: userId, vulnerability_id: vulnerabilityId })
-    })
   }
 }
 
@@ -143,7 +163,7 @@ export const container = {
   create: (vulnerabilityId, userId, sessionId) => {
     return request('/container/create', {
       method: 'POST',
-      body: JSON.stringify({ vulnerability_id: vulnerabilityId, user_id: userId, session_id: sessionId })
+      body: JSON.stringify({ vulnerability_id: vulnerabilityId, user_id: userId, session_db_id: sessionId })
     })
   },
   
@@ -154,10 +174,10 @@ export const container = {
     return request('/container/list')
   },
   
-  remove: (containerId, userId, vulnerabilityId, sessionId) => {
+  remove: (containerId, userId, vulnerabilityId, sessionId, sync = true) => {
     return request(`/container/remove/${containerId}`, {
       method: 'POST',
-      body: JSON.stringify({ user_id: userId, vulnerability_id: vulnerabilityId, session_id: sessionId })
+      body: JSON.stringify({ user_id: userId, vulnerability_id: vulnerabilityId, session_db_id: sessionId, sync: sync })
     })
   }
 }

@@ -1,5 +1,7 @@
 import hashlib
 import datetime
+import time
+import uuid
 import pymysql
 from contextlib import contextmanager
 from config import Config
@@ -58,6 +60,7 @@ def create_user(username, password, role='student'):
         cursor.execute("INSERT INTO users (username, password, role, created_at) VALUES (%s, %s, %s, %s)",
                       (username, hash_password(password), role, now))
         conn.commit()
+        return cursor.lastrowid
 
 def get_experiment_records(user_id):
     with db_connection() as conn:
@@ -103,33 +106,50 @@ def get_experiment_record(user_id, vulnerability_id):
         result = cursor.fetchone()
         return result if result else None
 
-def create_experiment_session(user_id, session_id, vulnerability_id=None, docker_container_id=None, server_port=None):
+def create_experiment_session(user_id, vulnerability_id=None, docker_container_id=None, server_port=None):
     with db_connection() as conn:
         cursor = conn.cursor()
         now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        session_id = str(uuid.uuid4())
         if docker_container_id and server_port:
             cursor.execute('''
-                INSERT INTO experiment_sessions (user_id, vulnerability_id, session_id, docker_container_id, server_port, start_time)
+                INSERT INTO experiment_sessions (session_id, user_id, vulnerability_id, docker_container_id, server_port, start_time)
                 VALUES (%s, %s, %s, %s, %s, %s)
-            ''', (user_id, vulnerability_id, session_id, docker_container_id, server_port, now))
+            ''', (session_id, user_id, vulnerability_id, docker_container_id, server_port, now))
         else:
             cursor.execute('''
-                INSERT INTO experiment_sessions (user_id, vulnerability_id, session_id, start_time)
+                INSERT INTO experiment_sessions (session_id, user_id, vulnerability_id, start_time)
                 VALUES (%s, %s, %s, %s)
-            ''', (user_id, vulnerability_id, session_id, now))
+            ''', (session_id, user_id, vulnerability_id, now))
         conn.commit()
+        return cursor.lastrowid, session_id
 
-def update_experiment_session(session_id, **kwargs):
+def update_experiment_session(session_db_id, **kwargs):
     if not kwargs:
         return
     with db_connection() as conn:
         cursor = conn.cursor()
         keys = list(kwargs.keys())
         values = list(kwargs.values())
-        set_clause = ", ".join("{} = %s".format(k) for k in keys)
-        params = values + [session_id]
-        cursor.execute('UPDATE experiment_sessions SET {} WHERE session_id = %s'.format(set_clause), params)
-        conn.commit()
+        set_clause = ", ".join("`{}` = %s".format(k) for k in keys)
+        
+        try:
+            if isinstance(session_db_id, int):
+                print(f"[DEBUG] update_experiment_session: updating by id={session_db_id}")
+                cursor.execute('UPDATE experiment_sessions SET {} WHERE id = %s'.format(set_clause), values + [session_db_id])
+            elif isinstance(session_db_id, str) and session_db_id.isdigit():
+                print(f"[DEBUG] update_experiment_session: updating by id={int(session_db_id)} (converted from string)")
+                cursor.execute('UPDATE experiment_sessions SET {} WHERE id = %s'.format(set_clause), values + [int(session_db_id)])
+            else:
+                print(f"[DEBUG] update_experiment_session: updating by session_id={session_db_id[:12]}...")
+                cursor.execute('UPDATE experiment_sessions SET {} WHERE session_id = %s'.format(set_clause), values + [session_db_id])
+            
+            affected = cursor.rowcount
+            print(f"[DEBUG] update_experiment_session: {affected} rows affected")
+            conn.commit()
+        except Exception as e:
+            print(f"[ERROR] update_experiment_session failed: {e}")
+            raise
 
 def get_experiment_sessions(user_id):
     with db_connection() as conn:
@@ -171,5 +191,3 @@ def get_user_score(user_id):
         cursor.execute('SELECT score FROM users WHERE id = %s', (user_id,))
         result = cursor.fetchone()
         return result['score'] if result else 0
-
-
