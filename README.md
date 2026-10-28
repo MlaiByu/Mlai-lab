@@ -40,14 +40,19 @@ git clone https://github.com/MlaiByu/Mlai-lab.git
 cd Mlai-lab
 
 # 2. 安装依赖
-pip3 install -r requirements.txt
+pip3 install -r backend/requirements.txt
 cd frontend && npm install && cd ..
 
-# 3. 配置数据库（MySQL命令行）
-CREATE DATABASE IF NOT EXISTS mlai_lab;
-CREATE USER IF NOT EXISTS 'mlai'@'localhost' IDENTIFIED BY 'Aa123456';
+# 3. 配置数据库（MySQL命令行；把 <你的密码> 换成自己设定的强密码）
+CREATE DATABASE IF NOT EXISTS mlai_lab CHARACTER SET utf8mb4;
+CREATE USER IF NOT EXISTS 'mlai'@'localhost' IDENTIFIED BY '<你的密码>';
 GRANT ALL PRIVILEGES ON mlai_lab.* TO 'mlai'@'localhost';
 FLUSH PRIVILEGES;
+
+# 3.1 配置环境变量（真实密码只写在 .env 里，.env 已被 .gitignore 忽略）
+cp .env.example .env
+vi .env                          # 填入上一步设置的数据库密码
+set -a && source .env && set +a  # 让当前 shell 生效（本项目不依赖 python-dotenv）
 
 # 4. 初始化数据库
 cd backend && python3 init_db.py && cd ..
@@ -84,11 +89,16 @@ sudo usermod -aG docker $USER && newgrp docker
 
 # 部署项目
 cd /opt && git clone https://github.com/MlaiByu/Mlai-lab.git
-cd Mlai-lab && pip3 install -r requirements.txt
+cd Mlai-lab && pip3 install -r backend/requirements.txt
 cd frontend && npm install && cd ..
 
+# 配置环境变量（生产环境请使用强密码，切勿把 .env 提交到仓库）
+cp .env.example .env && vi .env
+
 # 配置Systemd服务
-sudo cp mlai-backend.service mlai-frontend.service /etc/systemd/system/
+# 后端从环境变量读取数据库配置，请在其 [Service] 段加入：
+#   EnvironmentFile=/opt/Mlai-lab/.env
+sudo cp backend/mlai-backend.service frontend/mlai-frontend.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now mlai-backend mlai-frontend
 
@@ -125,20 +135,24 @@ cd /opt/Mlai-lab && git pull && sudo systemctl restart mlai-backend mlai-fronten
 # 清理Docker资源
 docker container prune -f && docker image prune -f && docker volume prune -f
 
-# 备份数据库
-mysqldump -u mlai -p'Aa123456' mlai_lab > backup_$(date +%Y%m%d).sql
+# 备份数据库（交互式输入密码，避免把口令写进命令行/历史记录）
+mysqldump -u "$DB_USER" -p "$DB_NAME" > backup_$(date +%Y%m%d).sql
 ```
 
 ---
 
-## 🔐 默认账号
+## 🔐 初始账号
 
-| 用户名 | 密码 | 角色 |
-|--------|------|------|
-| admin | password | 管理员 |
-| teacher1 | teacherpass | 教师 |
-| student1 | 123456 | 学生 |
-| student2 | 123456 | 学生 |
+初始化脚本 `backend/init_db.py` 会创建以下账号：
+
+| 用户名 | 角色 |
+|--------|------|
+| admin | 管理员 |
+| teacher1 | 教师 |
+| student1 / student2 | 学生 |
+
+> 初始密码在 `backend/init_db.py` 中定义。**部署到公网前请先修改该脚本中的密码再执行初始化**，或初始化后立即登录修改密码。
+> 如需更彻底的做法，可将初始密码也改为读环境变量（`Config.ADMIN_INIT_PASSWORD` 等），避免明文出现在源码中。
 
 ---
 
